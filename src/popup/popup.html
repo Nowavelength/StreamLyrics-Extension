@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>StreamLyrics Settings</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <div class="header">
+      <div class="logo">🎵</div>
+      <h1>StreamLyrics</h1>
+    </div>
+    
+    <div class="settings-group">
+      <div class="setting-row">
+        <label for="enabled">Enable Lyrics Panel</label>
+        <div class="toggle-switch">
+          <input type="checkbox" id="enabled" checked>
+          <span class="slider"></span>
+        </div>
+      </div>
+    </div>
+    
+    <div class="settings-group">
+      <label class="setting-label">Panel Width</label>
+      <div class="slider-container">
+        <input type="range" id="panelWidth" min="300" max="600" value="400" step="10">
+        <span id="widthValue">400px</span>
+      </div>
+    </div>
+    
+    <div class="settings-group">
+      <label class="setting-label">Font Size</label>
+      <div class="slider-container">
+        <input type="range" id="fontSize" min="20" max="48" value="32" step="2">
+        <span id="fontSizeValue">32px</span>
+      </div>
+    </div>
+    
+    <div class="footer">
+      <button id="resetBtn" class="reset-btn">Reset to Defaults</button>
+    </div>
+  </div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>

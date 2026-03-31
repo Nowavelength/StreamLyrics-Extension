@@ -1,0 +1,57 @@
+{
+    "manifest_version": 3,
+    "name": "StreamLyrics",
+    "description": "Spotify-style synchronized lyrics for YouTube and YouTube Music",
+    "version": "1.0.0",
+    "icons": {
+        "16": "icons/icon16.png",
+        "48": "icons/icon48.png",
+        "128": "icons/icon128.png"
+    },
+    "permissions": [
+        "activeTab",
+        "storage"
+    ],
+    "host_permissions": [
+        "https://www.youtube.com/*",
+        "https://music.youtube.com/*",
+        "https://lrclib.net/*",
+        "https://test-0k.onrender.com/*"
+    ],
+    "action": {
+        "default_icon": {
+            "16": "icons/icon16.png",
+            "48": "icons/icon48.png"
+        },
+        "default_title": "Toggle StreamLyrics Panel"
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "https://www.youtube.com/watch*",
+                "https://music.youtube.com/*"
+            ],
+            "js": [
+                "src/content/index.tsx"
+            ],
+            "css": [],
+            "run_at": "document_idle"
+        }
+    ],
+    "background": {
+        "service_worker": "src/background/service-worker.ts",
+        "type": "module"
+    },
+    "web_accessible_resources": [
+        {
+            "resources": [
+                "fonts/*",
+                "icons/*"
+            ],
+            "matches": [
+                "https://www.youtube.com/*",
+                "https://music.youtube.com/*"
+            ]
+        }
+    ]
+}
