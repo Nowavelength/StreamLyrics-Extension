@@ -4,8 +4,6 @@ import { LyricLine as LyricLineComponent } from './LyricLine';
 import { useVideoSync } from '../hooks/useVideoSync';
 import { useTranscript } from '../hooks/useTranscript';
 import { useDominantColor } from '../hooks/useDominantColor';
-import { useAudioBars } from '../hooks/useAudioBars';
-import { PrevIcon, NextIcon, PlayIcon, PauseIcon, RewindIcon, FastForwardIcon, SearchIcon, DownloadIcon, RefreshIcon } from './icons';
 import { LyricsSource } from '../services/transcriptService';
 import { storageService } from '../services/storageService';
 import { cleanVideoTitle, getCurrentTrackInfo, getLyricsSearchTitle } from '../utils/transcriptParser';
@@ -47,7 +45,6 @@ export const Panel: React.FC<PanelProps> = ({ isVisible, isPipMode, pipWindow, o
     const { lines, isLoading, error, source, currentTitle, refetch, searchManual, switchSource, tryNextResult, hasMoreResults } = useTranscript();
     const { currentLineIndex, isPaused, currentTime, offset, seekTo, adjustOffset, resetOffset, togglePlayPause } = useVideoSync(lines);
     const backgroundColor = useDominantColor();
-    const bars = useAudioBars(32);
     const [manualArtist, setManualArtist] = useState('');
     const [manualTrack, setManualTrack] = useState('');
     const [isSearchVisible, setIsSearchVisible] = useState(false);
@@ -73,7 +70,7 @@ export const Panel: React.FC<PanelProps> = ({ isVisible, isPipMode, pipWindow, o
      * Start dragging the panel
      */
     const handleDragStart = useCallback((e: React.MouseEvent) => {
-        if ((e.target as HTMLElement).closest('.resize-handle, .offset-btn, .source-btn, .lyric-line, .manual-search, .retry-btn, .player-dock')) return;
+        if ((e.target as HTMLElement).closest('.resize-handle, .offset-btn, .source-btn, .lyric-line, .manual-search, .retry-btn, .playback-controls')) return;
         e.preventDefault();
         setIsDragging(true);
         setDragOffset({ x: e.clientX - panelX, y: e.clientY - panelY });
@@ -377,38 +374,49 @@ export const Panel: React.FC<PanelProps> = ({ isVisible, isPipMode, pipWindow, o
                 </div>
             )}
 
-            {/* Header — clean: actions left, source right */}
+            {/* Header with source selector buttons */}
             <div className="source-header">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <button className="source-btn download-btn" onClick={handleDownload} title="Download .lrc (saves with offset)" style={{ display: 'grid', placeItems: 'center', padding: '4px', width: '26px', height: '26px' }}>
-                        <DownloadIcon size={14} />
+                    <button className="source-btn download-btn" onClick={handleDownload} title="Download .lrc (saves with offset)">
+                        {"\u2193"}
                     </button>
                     {source === 'local' && (
-                        <button className="source-btn delete-btn" onClick={handleDeleteLocal} title="Delete saved lyrics" style={{ background: 'rgba(255,80,80,0.15)', borderColor: 'rgba(255,80,80,0.3)', height: '26px', padding: '0 8px' }}>
+                        <button className="source-btn delete-btn" onClick={handleDeleteLocal} title="Delete saved lyrics" style={{ background: 'rgba(255,80,80,0.15)', borderColor: 'rgba(255,80,80,0.3)' }}>
                             Del
                         </button>
                     )}
-                    <button className="source-btn" onClick={() => setIsSearchVisible(!isSearchVisible)} title="Manual search" style={{ display: 'grid', placeItems: 'center', padding: '4px', width: '26px', height: '26px' }}>
-                        <SearchIcon size={14} />
+                    <button className="source-btn" onClick={() => setIsSearchVisible(!isSearchVisible)} title="Manual search">
+                        {"\uD83D\uDD0D"}
                     </button>
                 </div>
 
+                {/* Playback controls */}
+                <div className="playback-controls" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <button className="source-btn" onClick={prevSong} title="Previous song">{"\u23EE"}</button>
+                    <button className="source-btn" onClick={() => skipVideo(-5)} title="Rewind 5s">{"\u23EA"}</button>
+                    <button className="source-btn" onClick={togglePlayPause} title={isPaused ? 'Play' : 'Pause'} style={{ fontSize: '12px' }}>
+                        {isPaused ? "\u25B6" : "\u23F8"}
+                    </button>
+                    <button className="source-btn" onClick={() => skipVideo(5)} title="Forward 5s">{"\u23E9"}</button>
+                    <button className="source-btn" onClick={nextSong} title="Next song">{"\u23ED"}</button>
+                </div>
+
+                {/* Source display and cycle button */}
                 <div className="source-buttons">
-                    <span className="source-name" style={{ display: 'flex', alignItems: 'center', height: '26px', boxSizing: 'border-box' }}>
+                    <span className="source-name">
                         {source === 'local' && 'Local (Saved)'}
                         {source === 'youtube' && 'YouTube'}
                         {source === 'lrclib' && 'LRCLIB'}
                     </span>
                     {hasMoreResults && (
-                        <button className="source-btn next-btn" onClick={tryNextResult} title="Try next lyrics result" style={{ display: 'grid', placeItems: 'center', padding: '4px', width: '26px', height: '26px' }}>
-                            <RefreshIcon size={14} />
+                        <button className="source-btn next-btn" onClick={tryNextResult} title="Try next lyrics result">
+                            {"\u21bb"}
                         </button>
                     )}
                     <button
                         className="source-btn pip-btn"
                         onClick={isPipMode ? onClosePip : onOpenPip}
                         title={isPipMode ? "Pop In (return to page)" : "Pop Out (floating window)"}
-                        style={{ display: 'grid', placeItems: 'center', padding: '4px', width: '26px', height: '26px' }}
                     >
                         {isPipMode ? "\u2193" : "\u2191"}
                     </button>
@@ -437,6 +445,7 @@ export const Panel: React.FC<PanelProps> = ({ isVisible, isPipMode, pipWindow, o
                     </form>
                 </div>
             )}
+
 
             {/* Offset Controls */}
             <div className="offset-controls">
@@ -472,35 +481,6 @@ export const Panel: React.FC<PanelProps> = ({ isVisible, isPipMode, pipWindow, o
                         {"\u266a"} Instrumental {"\u266a"}
                     </div>
                 )}
-            </div>
-
-            {/* Bottom Player Dock */}
-            <div className="player-dock">
-                {/* Animated visualizer bars */}
-                <div className={`visualizer ${isPaused ? 'paused' : ''}`} aria-hidden="true">
-                    {bars.map((h, i) => (
-                        <span key={i} className="viz-bar" style={{ height: `${Math.max(4, h * 28)}px`, animationDelay: `${i * 0.04}s` }} />
-                    ))}
-                </div>
-
-                {/* Playback buttons */}
-                <div className="player-controls">
-                    <button className="player-btn" onClick={prevSong} title="Previous song" aria-label="Previous">
-                        <PrevIcon />
-                    </button>
-                    <button className="player-btn" onClick={() => skipVideo(-5)} title="Rewind 5s" aria-label="Rewind">
-                        <RewindIcon />
-                    </button>
-                    <button className="player-btn player-btn-play" onClick={togglePlayPause} title={isPaused ? 'Play' : 'Pause'} aria-label={isPaused ? 'Play' : 'Pause'}>
-                        {isPaused ? <PlayIcon size={22} /> : <PauseIcon size={22} />}
-                    </button>
-                    <button className="player-btn" onClick={() => skipVideo(5)} title="Forward 5s" aria-label="Forward">
-                        <FastForwardIcon />
-                    </button>
-                    <button className="player-btn" onClick={nextSong} title="Next song" aria-label="Next">
-                        <NextIcon />
-                    </button>
-                </div>
             </div>
         </div>
     );

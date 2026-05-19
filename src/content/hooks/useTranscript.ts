@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { LyricLine } from '../types';
 import { transcriptService, LyricsSource } from '../services/transcriptService';
-import { getVideoTitle } from '../utils/transcriptParser';
+import { CurrentTrackInfo, getCurrentTrackInfo, getLyricsSearchTitle } from '../utils/transcriptParser';
 
 interface UseTranscriptResult {
     lines: LyricLine[];
@@ -11,13 +11,19 @@ interface UseTranscriptResult {
     availableSources: LyricsSource[];
     currentTitle: string;
     refetch: () => void;
+    searchManual: (artist: string, track: string) => void;
     switchSource: (source: LyricsSource) => void;
     tryNextResult: () => void;
     hasMoreResults: boolean;
+    initialOffset: number;
 }
 
+const SONG_CHANGE_DEBOUNCE_MS = 450;
+
 /**
- * Hook for fetching lyrics with source switching and song change detection
+ * Hook for fetching lyrics with source switching and song change detection.
+ * Once the extension is activated, this keeps watching the playing track even
+ * when the lyrics panel is hidden or rendered in the popout window.
  */
 export function useTranscript(): UseTranscriptResult {
     const [lines, setLines] = useState<LyricLine[]>([]);
@@ -28,73 +34,119 @@ export function useTranscript(): UseTranscriptResult {
     const [currentTitle, setCurrentTitle] = useState('');
     const [lrclibResultIndex, setLrclibResultIndex] = useState(0);
     const [allLrclibResults, setAllLrclibResults] = useState<LyricLine[][]>([]);
-
-    // Cache for sources
     const [lrclibLines, setLrclibLines] = useState<LyricLine[] | null>(null);
+    const [initialOffset, setInitialOffset] = useState(0);
 
-    // Track last fetched title to avoid duplicate fetches
-    const lastFetchedTitle = useRef<string>('');
+    const linesRef = useRef<LyricLine[]>([]);
+    const fetchIdRef = useRef(0);
+    const lastFetchedSignatureRef = useRef('');
+    const lastSeenSignatureRef = useRef('');
+    const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const fetchLyrics = useCallback(async (force: boolean = false) => {
-        const title = getVideoTitle();
+    useEffect(() => {
+        linesRef.current = lines;
+    }, [lines]);
 
-        // Skip if same title as last fetch (unless forced)
-        if (!force && title === lastFetchedTitle.current && lines.length > 0) {
-            console.log('[StreamLyrics] Same title, skipping fetch');
+    const loadLrclibAlternatives = useCallback((rawTitle: string, trackInfo: CurrentTrackInfo, fetchId: number) => {
+        transcriptService.fetchAllFromLrclib(rawTitle, trackInfo).then((lrcResults) => {
+            if (fetchId !== fetchIdRef.current || !lrcResults || lrcResults.length === 0) {
+                return;
+            }
+
+            setAllLrclibResults(lrcResults);
+            setLrclibLines(lrcResults[0]);
+            setAvailableSources((prev) => prev.includes('lrclib') ? prev : [...prev, 'lrclib']);
+        }).catch(() => { });
+    }, []);
+
+    const fetchLyrics = useCallback(async (
+        force: boolean = false,
+        manualInfo?: Pick<CurrentTrackInfo, 'rawTitle' | 'title' | 'artist'>
+    ) => {
+        const detectedTrackInfo = getCurrentTrackInfo();
+        const trackInfo = manualInfo
+            ? {
+                ...detectedTrackInfo,
+                rawTitle: manualInfo.rawTitle,
+                title: manualInfo.title,
+                artist: manualInfo.artist,
+                signature: `manual|${manualInfo.artist.toLowerCase()}|${manualInfo.title.toLowerCase()}`,
+            }
+            : detectedTrackInfo;
+        const searchTitle = getLyricsSearchTitle(trackInfo);
+        const rawTitle = trackInfo.rawTitle || searchTitle;
+        const signature = trackInfo.signature || searchTitle.toLowerCase().trim();
+
+        if (!searchTitle || searchTitle.length < 2) {
             return;
         }
 
-        lastFetchedTitle.current = title;
-        setCurrentTitle(title);
+        if (!force && signature === lastFetchedSignatureRef.current && linesRef.current.length > 0) {
+            console.log('[StreamLyrics] Same track, skipping fetch');
+            return;
+        }
+
+        const fetchId = fetchIdRef.current + 1;
+        fetchIdRef.current = fetchId;
+        lastFetchedSignatureRef.current = signature;
+        lastSeenSignatureRef.current = signature;
+
+        setCurrentTitle(trackInfo.artist ? `${trackInfo.artist} - ${trackInfo.title}` : trackInfo.title);
         setIsLoading(true);
         setError(null);
+        setLines([]);
+        setSource(null);
         setLrclibLines(null);
         setAvailableSources([]);
         setLrclibResultIndex(0);
         setAllLrclibResults([]);
 
-        console.log('[StreamLyrics] Fetching lyrics for:', title);
+        console.log('[StreamLyrics] Fetching lyrics for:', searchTitle);
 
         try {
-            // Use new cascading multi-source fetch
-            const result = await transcriptService.fetchLyrics();
+            const handlePartialResult = (partial: any) => {
+                if (fetchId !== fetchIdRef.current) return;
+                
+                setLines(partial.lines);
+                setSource(partial.source);
+                setIsLoading(false);
+                setAvailableSources(prev => prev.includes(partial.source) ? prev : [...prev, partial.source]);
+                
+                if (partial.offset) {
+                    setInitialOffset(partial.offset);
+                }
+            };
+
+            const result = await transcriptService.fetchLyrics(rawTitle, trackInfo, handlePartialResult);
+
+            if (fetchId !== fetchIdRef.current) {
+                console.log('[StreamLyrics] Ignoring stale lyrics response');
+                return;
+            }
 
             if (result) {
+                // Ensure final state is correct, though partial might have already set it
                 setLines(result.lines);
                 setSource(result.source);
-                setAvailableSources([result.source]);
+                setAvailableSources(prev => prev.includes(result.source) ? prev : [...prev, result.source]);
+                
+                if (result.offset) {
+                    setInitialOffset(result.offset);
+                }
 
-                // Cache result based on source
+                if (result.alternatives && result.alternatives.length > 0) {
+                    setAllLrclibResults(result.alternatives);
+                    setLrclibLines(result.alternatives[0]);
+                    setAvailableSources((prev) => prev.includes('lrclib') ? prev : [...prev, 'lrclib']);
+                }
+
                 if (result.source === 'local') {
-                    // Even if we found local lyrics, fetch others in background so user can switch
-                    transcriptService.fetchAllFromLrclib().then(lrcResults => {
-                        if (lrcResults && lrcResults.length > 0) {
-                            setAllLrclibResults(lrcResults);
-                            setLrclibLines(lrcResults[0]);
-                            setAvailableSources(prev => prev.includes('lrclib') ? prev : [...prev, 'lrclib']);
-                        }
-                    }).catch(() => { });
+                    loadLrclibAlternatives(rawTitle, trackInfo, fetchId);
                 }
 
-                // For LRCLIB, try to get all results for cycling
-                if (result.source === 'lrclib') {
+                if (result.source === 'lrclib' && !result.alternatives) {
                     setLrclibLines(result.lines);
-                    transcriptService.fetchAllFromLrclib().then(lrcResults => {
-                        if (lrcResults && lrcResults.length > 0) {
-                            setAllLrclibResults(lrcResults);
-                        }
-                    }).catch(() => { });
-                }
-
-                // For Lyrica, fetch LRCLIB alternatives in background
-                if (result.source === 'lyrica') {
-                    transcriptService.fetchAllFromLrclib().then(lrcResults => {
-                        if (lrcResults && lrcResults.length > 0) {
-                            setAllLrclibResults(lrcResults);
-                            setLrclibLines(lrcResults[0]);
-                            setAvailableSources(prev => prev.includes('lrclib') ? prev : [...prev, 'lrclib']);
-                        }
-                    }).catch(() => { });
+                    loadLrclibAlternatives(rawTitle, trackInfo, fetchId);
                 }
             } else {
                 setLines([]);
@@ -102,87 +154,151 @@ export function useTranscript(): UseTranscriptResult {
                 setError('No lyrics found from any source');
             }
         } catch (err) {
+            if (fetchId !== fetchIdRef.current) {
+                return;
+            }
+
             console.error('[StreamLyrics] Error fetching transcript:', err);
             setError('Failed to fetch lyrics');
             setLines([]);
         } finally {
-            setIsLoading(false);
+            if (fetchId === fetchIdRef.current) {
+                setIsLoading(false);
+            }
         }
-    }, [lines.length]);
+    }, [loadLrclibAlternatives]);
 
-    /**
-     * Switch to a different lyrics source
-     */
+    const scheduleTrackCheck = useCallback((reason: string) => {
+        const trackInfo = getCurrentTrackInfo();
+        const searchTitle = getLyricsSearchTitle(trackInfo);
+        const signature = trackInfo.signature || searchTitle.toLowerCase().trim();
+
+        if (!signature || searchTitle.length < 2) {
+            return;
+        }
+
+        if (!lastSeenSignatureRef.current) {
+            lastSeenSignatureRef.current = signature;
+        }
+
+        if (!lastFetchedSignatureRef.current) {
+            return;
+        }
+
+        if (signature === lastSeenSignatureRef.current && signature === lastFetchedSignatureRef.current) {
+            return;
+        }
+
+        console.log('[StreamLyrics] Song changed:', reason, searchTitle);
+        lastSeenSignatureRef.current = signature;
+
+        if (debounceTimerRef.current) {
+            clearTimeout(debounceTimerRef.current);
+        }
+
+        debounceTimerRef.current = setTimeout(() => {
+            fetchLyrics(true);
+        }, SONG_CHANGE_DEBOUNCE_MS);
+    }, [fetchLyrics]);
+
     const switchSource = useCallback((newSource: LyricsSource) => {
         if (newSource === 'lrclib' && lrclibLines) {
             setLines(lrclibLines);
             setSource('lrclib');
         } else if (newSource === 'local') {
-            // Re-fetch from storage to ensure we have the latest
-            transcriptService.fetchFromStorage().then(localLines => {
-                if (localLines) {
-                    setLines(localLines);
+            const searchTitle = getLyricsSearchTitle(getCurrentTrackInfo());
+            transcriptService.fetchFromStorage(searchTitle).then((localData) => {
+                if (localData) {
+                    setLines(localData.lines);
                     setSource('local');
+                    if (localData.offset) {
+                        setInitialOffset(localData.offset);
+                    }
                 }
             });
         }
     }, [lrclibLines]);
 
-    /**
-     * Try the next Lrclib result (for when wrong song is matched)
-     */
     const tryNextResult = useCallback(() => {
         if (allLrclibResults.length <= 1) return;
 
         const nextIndex = (lrclibResultIndex + 1) % allLrclibResults.length;
         setLrclibResultIndex(nextIndex);
         setLrclibLines(allLrclibResults[nextIndex]);
-
-        if (source === 'lrclib') {
-            setLines(allLrclibResults[nextIndex]);
-        }
+        setLines(allLrclibResults[nextIndex]);
+        setSource('lrclib');
 
         console.log(`[StreamLyrics] Switched to result ${nextIndex + 1}/${allLrclibResults.length}`);
-    }, [allLrclibResults, lrclibResultIndex, source]);
+    }, [allLrclibResults, lrclibResultIndex]);
 
-    // Initial fetch
     useEffect(() => {
-        const timer = setTimeout(fetchLyrics, 1000);
+        const timer = setTimeout(() => fetchLyrics(true), 1000);
         return () => clearTimeout(timer);
     }, [fetchLyrics]);
 
-    // Detect song changes via stable interval checking (not MutationObserver)
-    // MutationObserver fires too often on YT Music causing glitchy reloads
     useEffect(() => {
-        let lastCheckedTitle = currentTitle;
-        let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+        const interval = setInterval(() => scheduleTrackCheck('poll'), 1500);
 
-        const interval = setInterval(() => {
-            const newTitle = getVideoTitle();
+        const handleVisibilityOrFocus = () => scheduleTrackCheck('visibility/focus');
+        document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+        window.addEventListener('focus', handleVisibilityOrFocus);
+        window.addEventListener('pageshow', handleVisibilityOrFocus);
 
-            // Only refetch if title actually changed and is different from what we fetched
-            if (newTitle &&
-                newTitle !== lastCheckedTitle &&
-                newTitle !== lastFetchedTitle.current &&
-                newTitle.length > 3) { // Ignore very short titles (loading states)
-
-                console.log('[StreamLyrics] Song changed:', newTitle);
-                lastCheckedTitle = newTitle;
-
-                // Debounce: clear any pending fetch and schedule a new one
-                if (debounceTimer) clearTimeout(debounceTimer);
-                debounceTimer = setTimeout(() => {
-                    lastFetchedTitle.current = '';
-                    fetchLyrics(true); // Force refetch for new song
-                }, 500); // Wait 500ms to ensure title is stable
+        let observerTimer: ReturnType<typeof setTimeout> | null = null;
+        const observer = new MutationObserver(() => {
+            if (observerTimer) {
+                clearTimeout(observerTimer);
             }
-        }, 1500); // Check every 1.5 seconds
+
+            observerTimer = setTimeout(() => scheduleTrackCheck('dom'), 300);
+        });
+
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true,
+            characterData: true,
+        });
+
+        const videoListeners = ['loadedmetadata', 'durationchange', 'emptied', 'play', 'playing', 'canplay'];
+        let attachedVideo: HTMLVideoElement | null = null;
+        let detachVideo = () => { };
+
+        const attachToCurrentVideo = () => {
+            const video = document.querySelector('video') as HTMLVideoElement | null;
+            if (!video || video === attachedVideo) {
+                return;
+            }
+
+            detachVideo();
+            attachedVideo = video;
+            const handler = () => scheduleTrackCheck('media');
+            videoListeners.forEach((eventName) => video.addEventListener(eventName, handler));
+            detachVideo = () => {
+                videoListeners.forEach((eventName) => video.removeEventListener(eventName, handler));
+            };
+        };
+
+        attachToCurrentVideo();
+        const videoInterval = setInterval(attachToCurrentVideo, 2000);
 
         return () => {
             clearInterval(interval);
-            if (debounceTimer) clearTimeout(debounceTimer);
+            clearInterval(videoInterval);
+            document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+            window.removeEventListener('focus', handleVisibilityOrFocus);
+            window.removeEventListener('pageshow', handleVisibilityOrFocus);
+            observer.disconnect();
+            detachVideo();
+
+            if (observerTimer) {
+                clearTimeout(observerTimer);
+            }
+
+            if (debounceTimerRef.current) {
+                clearTimeout(debounceTimerRef.current);
+            }
         };
-    }, [fetchLyrics, currentTitle]);
+    }, [scheduleTrackCheck]);
 
     return {
         lines,
@@ -191,9 +307,23 @@ export function useTranscript(): UseTranscriptResult {
         source,
         availableSources,
         currentTitle,
-        refetch: fetchLyrics,
+        refetch: () => fetchLyrics(true),
+        searchManual: (artist: string, track: string) => {
+            const cleanArtist = artist.trim();
+            const cleanTrack = track.trim();
+            if (!cleanTrack) {
+                return;
+            }
+
+            fetchLyrics(true, {
+                rawTitle: cleanArtist ? `${cleanArtist} - ${cleanTrack}` : cleanTrack,
+                title: cleanTrack,
+                artist: cleanArtist,
+            });
+        },
         switchSource,
         tryNextResult,
         hasMoreResults: allLrclibResults.length > 1,
+        initialOffset,
     };
 }

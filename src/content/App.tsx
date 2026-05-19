@@ -88,6 +88,14 @@ export const App: React.FC<{ styles?: string; initialVisible?: boolean }> = ({ s
             setPipWindow(pipWin);
             setIsPipMode(true);
 
+            pipWin.document.documentElement.style.width = '100%';
+            pipWin.document.documentElement.style.height = '100%';
+            pipWin.document.body.style.width = '100%';
+            pipWin.document.body.style.height = '100%';
+            pipWin.document.body.style.margin = '0';
+            pipWin.document.body.style.overflow = 'hidden';
+            pipWin.document.body.style.background = '#111';
+
             // Inject styles into PIP window
             if (styles) {
                 const styleEl = pipWin.document.createElement('style');

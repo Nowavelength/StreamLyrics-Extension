@@ -1,5 +1,13 @@
 import { LyricLine } from '../types';
-import { parseLrcFormat, cleanVideoTitle } from '../utils/transcriptParser';
+import {
+    CurrentTrackInfo,
+    parseLrcFormat,
+    cleanVideoTitle,
+    getLyricsSearchCandidates,
+    LyricsSearchCandidate,
+    getVideoTitle,
+    getVideoArtist
+} from '../utils/transcriptParser';
 
 interface LrclibSearchResult {
     id: number;
@@ -14,8 +22,21 @@ interface LrclibSearchResult {
 }
 
 /**
+ * Compute a content-based signature for deduplication.
+ * Two lyrics are "the same" only if their text lines match exactly.
+ */
+function lyricsSignature(lines: LyricLine[]): string {
+    return lines.map(l => l.text.trim().toLowerCase()).join('\n');
+}
+
+/**
  * Service for fetching lyrics from Lrclib API
  * https://lrclib.net/docs
+ *
+ * Multi-strategy fetcher: runs 2-3 independent fetch passes using different
+ * query combinations (detected title, cleaned title, channel-as-artist,
+ * YouTube Music metadata, title-only fallback, etc.) and collects ALL unique
+ * lyrics across every pass into one list.
  */
 export class LrclibService {
     private baseUrl = 'https://lrclib.net/api';
@@ -23,64 +44,112 @@ export class LrclibService {
     /**
      * Search for lyrics by video title - returns first match
      */
-    async searchByTitle(videoTitle: string): Promise<LyricLine[] | null> {
-        const results = await this.searchAllByTitle(videoTitle);
+    async searchByTitle(videoTitle: string, info?: Partial<CurrentTrackInfo>): Promise<LyricLine[] | null> {
+        const results = await this.searchAllByTitle(videoTitle, info);
         return results.length > 0 ? results[0] : null;
     }
 
     /**
-     * Search for all matching lyrics by video title - returns array of results
+     * Multi-strategy search.  Runs EVERY candidate query independently,
+     * collects unique lyrics across all of them, and streams results back
+     * via the optional onResult callback.
      */
-    async searchAllByTitle(videoTitle: string): Promise<LyricLine[][]> {
+    async searchAllByTitle(
+        videoTitle: string,
+        info?: Partial<CurrentTrackInfo>,
+        onResult?: (lines: LyricLine[]) => void
+    ): Promise<LyricLine[][]> {
         const { artist, track } = cleanVideoTitle(videoTitle);
+        const candidates = getLyricsSearchCandidates(videoTitle, info);
 
-        console.log('[StreamLyrics] Searching Lrclib for:', { artist, track });
+        console.log('[StreamLyrics] Multi-strategy search starting:', { artist, track, candidateCount: candidates.length });
 
         try {
             const allResults: LyricLine[][] = [];
+            const seenSignatures = new Set<string>();
+            const seenQueries = new Set<string>();
 
-            // Search with full query
-            const fullQuery = artist ? `${artist} ${track}` : track;
-            const results = await this.searchQuery(fullQuery);
+            // --- Build a list of diverse query strings to try ---
+            const queryPlan: { query: string; reason: string }[] = [];
 
-            if (results && results.length > 0) {
-                // Get all results with synced lyrics (up to 5)
-                const withSynced = results
-                    .filter(r => r.syncedLyrics)
-                    .slice(0, 5);
+            // Pass 1: Original detected artist + track
+            if (artist && track) {
+                queryPlan.push({ query: `${artist} ${track}`, reason: 'detected-full' });
+            }
+
+            // Pass 2: Track-only (catches cases where artist parsing is wrong)
+            if (track && track !== artist) {
+                queryPlan.push({ query: track, reason: 'track-only' });
+            }
+
+            // Pass 3: Channel name as artist (YouTube channel often IS the artist)
+            const channelArtist = getVideoArtist();
+            if (channelArtist && channelArtist !== artist && track) {
+                queryPlan.push({ query: `${channelArtist} ${track}`, reason: 'channel-artist' });
+            }
+
+            // Pass 4: YouTube Music / MediaSession metadata artist
+            if (info?.artist && info.artist !== artist && info.artist !== channelArtist && track) {
+                queryPlan.push({ query: `${info.artist} ${track}`, reason: 'media-session-artist' });
+            }
+
+            // Pass 5: Raw title stripped of decorators (catches messy titles)
+            const rawCleaned = videoTitle
+                .replace(/\(.*?\)/g, '')
+                .replace(/\[.*?\]/g, '')
+                .replace(/\s+/g, ' ')
+                .trim();
+            if (rawCleaned && rawCleaned !== track) {
+                queryPlan.push({ query: rawCleaned, reason: 'raw-cleaned' });
+            }
+
+            // Pass 6+: All candidates from getLyricsSearchCandidates (already diverse)
+            for (const c of candidates.slice(0, 12)) {
+                const q = c.artist ? `${c.artist} ${c.track}` : c.track;
+                queryPlan.push({ query: q, reason: `candidate:${c.reason}` });
+            }
+
+            console.log(`[StreamLyrics] Query plan: ${queryPlan.length} queries`);
+
+            // --- Execute each query, accumulate unique lyrics ---
+            const MAX_RESULTS = 10;
+
+            for (const { query, reason } of queryPlan) {
+                if (allResults.length >= MAX_RESULTS) break;
+
+                const cleanQuery = query.replace(/\s+/g, ' ').trim();
+                const key = cleanQuery.toLowerCase();
+                if (!cleanQuery || seenQueries.has(key)) continue;
+                seenQueries.add(key);
+
+                console.log(`[StreamLyrics] Query [${reason}]: "${cleanQuery}"`);
+
+                const apiResults = await this.searchQuery(cleanQuery);
+                if (!apiResults || apiResults.length === 0) continue;
+
+                const withSynced = apiResults.filter(r => r.syncedLyrics).slice(0, 3);
 
                 for (const result of withSynced) {
-                    if (result.syncedLyrics) {
-                        const parsed = parseLrcFormat(result.syncedLyrics);
-                        if (parsed.length > 0) {
-                            allResults.push(parsed);
-                            console.log(`[StreamLyrics] Found: ${result.artistName} - ${result.trackName}`);
-                        }
+                    if (allResults.length >= MAX_RESULTS) break;
+                    if (!result.syncedLyrics) continue;
+
+                    const parsed = parseLrcFormat(result.syncedLyrics);
+                    if (parsed.length === 0) continue;
+
+                    const sig = lyricsSignature(parsed);
+                    if (seenSignatures.has(sig)) continue;
+
+                    seenSignatures.add(sig);
+                    allResults.push(parsed);
+                    console.log(`[StreamLyrics] ✓ Found [${reason}]: ${result.artistName} - ${result.trackName} (${parsed.length} lines)`);
+
+                    if (onResult) {
+                        onResult(parsed);
                     }
                 }
             }
 
-            // If no results, try with just track name
-            if (allResults.length === 0 && track) {
-                const trackResults = await this.searchQuery(track);
-                if (trackResults && trackResults.length > 0) {
-                    const withSynced = trackResults
-                        .filter(r => r.syncedLyrics)
-                        .slice(0, 5);
-
-                    for (const result of withSynced) {
-                        if (result.syncedLyrics) {
-                            const parsed = parseLrcFormat(result.syncedLyrics);
-                            if (parsed.length > 0) {
-                                allResults.push(parsed);
-                                console.log(`[StreamLyrics] Found (track only): ${result.artistName} - ${result.trackName}`);
-                            }
-                        }
-                    }
-                }
-            }
-
-            console.log(`[StreamLyrics] Total Lrclib results: ${allResults.length}`);
+            console.log(`[StreamLyrics] Total unique results: ${allResults.length} from ${seenQueries.size} queries`);
             return allResults;
         } catch (error) {
             console.error('[StreamLyrics] Lrclib search error:', error);

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { LyricLine } from '../types';
 
+
 interface UseVideoSyncResult {
     currentLineIndex: number;
     isPaused: boolean;
@@ -9,6 +10,7 @@ interface UseVideoSyncResult {
     seekTo: (time: number) => void;
     adjustOffset: (delta: number) => void;
     resetOffset: () => void;
+    togglePlayPause: () => void;
 }
 
 /**
@@ -16,11 +18,15 @@ interface UseVideoSyncResult {
  * Uses requestAnimationFrame for 60fps precision
  * Handles pause/resume detection and timing offset
  */
-export function useVideoSync(lines: LyricLine[]): UseVideoSyncResult {
+export function useVideoSync(lines: LyricLine[], initialOffset: number = 0): UseVideoSyncResult {
     const [currentLineIndex, setCurrentLineIndex] = useState(-1);
     const [isPaused, setIsPaused] = useState(true);
     const [currentTime, setCurrentTime] = useState(0);
-    const [offset, setOffset] = useState(0); // Offset in seconds (positive = lyrics ahead, negative = lyrics behind)
+    const [offset, setOffset] = useState(initialOffset); // Offset in seconds (positive = lyrics ahead, negative = lyrics behind)
+
+    useEffect(() => {
+        setOffset(initialOffset);
+    }, [initialOffset]);
 
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const rafIdRef = useRef<number | null>(null);
@@ -111,6 +117,20 @@ export function useVideoSync(lines: LyricLine[]): UseVideoSyncResult {
     }, []);
 
     /**
+     * Toggle play/pause for sync testing
+     */
+    const togglePlayPause = useCallback(() => {
+        const video = videoRef.current;
+        if (video) {
+            if (video.paused) {
+                video.play();
+            } else {
+                video.pause();
+            }
+        }
+    }, []);
+
+    /**
      * Find and attach to YouTube/YouTube Music video element
      */
     useEffect(() => {
@@ -158,6 +178,9 @@ export function useVideoSync(lines: LyricLine[]): UseVideoSyncResult {
      * Start/stop sync loop based on video availability
      */
     useEffect(() => {
+        lastLineIndexRef.current = -1;
+        setCurrentLineIndex(-1);
+
         if (lines.length > 0) {
             rafIdRef.current = requestAnimationFrame(syncLoop);
         }
@@ -206,5 +229,6 @@ export function useVideoSync(lines: LyricLine[]): UseVideoSyncResult {
         seekTo,
         adjustOffset,
         resetOffset,
+        togglePlayPause,
     };
 }

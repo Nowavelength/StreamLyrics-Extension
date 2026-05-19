@@ -195,10 +195,10 @@ function getStyles(): string {
     }
 
     .streamlyrics-scroll-container {
-      height: calc(100% - 90px);
+      height: calc(100% - 220px);
       margin-top: 90px;
       overflow-y: auto;
-      padding: 20px 24px 40% 24px;
+      padding: 20px 24px 80px 24px;
       scrollbar-width: none;
       -ms-overflow-style: none;
     }
@@ -311,7 +311,7 @@ function getStyles(): string {
     /* Scroll Container Adjustments for PIP */
     .in-pip-window .streamlyrics-scroll-container {
       margin-top: 80px;
-      height: calc(100% - 80px);
+      height: calc(100% - 210px);
     }
 
     .in-pip-window {
@@ -426,21 +426,122 @@ function getStyles(): string {
       justify-content: center;
       height: 100%;
       color: #FFFFFF;
-      opacity: 0.7;
+      text-align: center;
+      padding: 32px;
+      background:
+        radial-gradient(circle at center, rgba(255,255,255,0.16), transparent 34%),
+        linear-gradient(180deg, rgba(0,0,0,0.08), rgba(0,0,0,0.18));
     }
 
-    .loading-spinner {
-      width: 40px;
-      height: 40px;
-      border: 3px solid rgba(255, 255, 255, 0.3);
-      border-top-color: #FFFFFF;
+    .loading-visual {
+      position: relative;
+      width: 92px;
+      height: 92px;
+      margin-bottom: 20px;
+    }
+
+    .loading-ring,
+    .loading-dot {
+      position: absolute;
+      inset: 0;
+      margin: auto;
       border-radius: 50%;
-      animation: spin 1s linear infinite;
     }
 
-    @keyframes spin {
-      to {
-        transform: rotate(360deg);
+    .loading-ring {
+      border: 1px solid rgba(255,255,255,0.28);
+      animation: lyrics-pulse-ring 1.8s ease-in-out infinite;
+    }
+
+    .loading-ring-two {
+      inset: 16px;
+      animation-delay: 0.35s;
+    }
+
+    .loading-dot {
+      width: 18px;
+      height: 18px;
+      background: #fff;
+      box-shadow: 0 0 28px rgba(255,255,255,0.65);
+      animation: lyrics-float-dot 1.4s ease-in-out infinite;
+    }
+
+    .loading-text {
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: 0;
+      margin-bottom: 8px;
+    }
+
+    .loading-subtext {
+      max-width: 260px;
+      color: rgba(255,255,255,0.7);
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1.45;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+    }
+
+    .loading-bars {
+      display: flex;
+      align-items: end;
+      gap: 5px;
+      height: 26px;
+      margin-top: 22px;
+    }
+
+    .loading-bars span {
+      width: 5px;
+      height: 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.78);
+      animation: lyrics-bars 0.9s ease-in-out infinite;
+    }
+
+    .loading-bars span:nth-child(2) {
+      animation-delay: 0.12s;
+    }
+
+    .loading-bars span:nth-child(3) {
+      animation-delay: 0.24s;
+    }
+
+    .loading-bars span:nth-child(4) {
+      animation-delay: 0.36s;
+    }
+
+    @keyframes lyrics-pulse-ring {
+      0%, 100% {
+        opacity: 0.35;
+        transform: scale(0.78);
+      }
+      50% {
+        opacity: 0.9;
+        transform: scale(1);
+      }
+    }
+
+    @keyframes lyrics-float-dot {
+      0%, 100% {
+        transform: translateY(5px) scale(0.9);
+      }
+      50% {
+        transform: translateY(-5px) scale(1);
+      }
+    }
+
+    @keyframes lyrics-bars {
+      0%, 100% {
+        height: 8px;
+        opacity: 0.55;
+      }
+      50% {
+        height: 26px;
+        opacity: 1;
       }
     }
 
@@ -452,19 +553,184 @@ function getStyles(): string {
       justify-content: center;
       height: 100%;
       color: #FFFFFF;
-      opacity: 0.7;
       text-align: center;
       padding: 32px;
+      background: linear-gradient(180deg, rgba(0,0,0,0.06), rgba(0,0,0,0.2));
     }
 
     .no-lyrics-icon {
-      font-size: 48px;
+      width: 72px;
+      height: 72px;
       margin-bottom: 16px;
+      border-radius: 50%;
+      border: 1px solid rgba(255,255,255,0.24);
+      background: rgba(255,255,255,0.1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .no-lyrics-icon::before {
+      content: "\\266A";
+      font-size: 34px;
+      font-weight: 800;
     }
 
     .no-lyrics-text {
       font-size: 18px;
       font-weight: 600;
+      line-height: 1.35;
+      max-width: 270px;
+    }
+
+    .retry-btn {
+      margin-top: 18px;
+      color: rgba(255,255,255,0.9);
+      background: rgba(255,255,255,0.14);
+      border: 1px solid rgba(255,255,255,0.22);
+      border-radius: 6px;
+      padding: 8px 14px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .retry-btn:hover {
+      background: rgba(255,255,255,0.22);
+    }
+
+    .manual-search {
+      width: min(280px, 100%);
+      margin-top: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .manual-search input {
+      width: 100%;
+      color: rgba(255,255,255,0.95);
+      background: rgba(0,0,0,0.18);
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 6px;
+      padding: 9px 10px;
+      outline: none;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .manual-search input::placeholder {
+      color: rgba(255,255,255,0.52);
+    }
+
+    .manual-search input:focus {
+      border-color: rgba(255,255,255,0.4);
+      background: rgba(0,0,0,0.25);
+    }
+
+    .manual-search button {
+      color: rgba(0,0,0,0.82);
+      background: rgba(255,255,255,0.86);
+      border: 0;
+      border-radius: 6px;
+      padding: 9px 12px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .manual-search button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    /* Bottom Player Dock */
+    .player-dock {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      display: flex;
+      flex-direction: column;
+      background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.6) 70%, transparent 100%);
+      padding: 24px 16px 16px 16px;
+      z-index: 5;
+    }
+
+    /* Visualizer (Waveform) */
+    .visualizer {
+      display: flex;
+      align-items: center; /* Makes bars expand symmetrically up and down */
+      justify-content: center;
+      gap: 4px;
+      height: 32px;
+      margin-bottom: 12px;
+    }
+
+    .viz-bar {
+      width: 4px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.82);
+      transition: height 90ms linear, opacity 90ms linear;
+      will-change: height;
+    }
+
+    .visualizer.paused .viz-bar {
+      height: 4px !important;
+      opacity: 0.4;
+      transition: all 0.3s ease;
+    }
+
+    /* Player Controls */
+    .player-controls {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+    }
+
+    .player-btn {
+      appearance: none;
+      border: none;
+      background: transparent;
+      color: rgba(255, 255, 255, 0.72);
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      padding: 0;
+      line-height: 0;
+      box-sizing: border-box;
+      flex: 0 0 auto;
+      transition: transform 0.18s ease, color 0.18s ease, opacity 0.18s ease;
+    }
+
+    .player-btn svg {
+      display: block;
+    }
+
+    .player-btn:hover {
+      color: #fff;
+      transform: scale(1.08);
+    }
+
+    .player-btn-play {
+      width: 52px;
+      height: 52px;
+      border-radius: 999px;
+      background: #fff;
+      color: #111;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+    }
+
+    .player-btn-play:hover {
+      color: #111;
+      transform: scale(1.04);
+      background: #f4f4f4;
     }
   `;
 }
@@ -478,15 +744,11 @@ const urlObserver = new MutationObserver(() => {
   if (window.location.href !== lastUrl) {
     lastUrl = window.location.href;
 
-    // Re-init if navigated to a watch page AND it was already activated
-    if (lastUrl.includes('/watch') && hasBeenActivated) {
-      // Remove old instance
-      const existing = document.getElementById(CONTAINER_ID);
-      if (existing) {
-        existing.remove();
-      }
-
-      setTimeout(() => init(true), 500); // Pass true to keep it visible
+    // Keep the existing React instance alive on YouTube SPA navigation.
+    // Re-mounting here orphans document-PiP windows and makes the in-page
+    // panel appear again while the popout goes black.
+    if (hasBeenActivated && !document.getElementById(CONTAINER_ID)) {
+      setTimeout(() => init(true), 500);
     }
   }
 });

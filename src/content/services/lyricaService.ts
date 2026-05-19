@@ -13,6 +13,10 @@ export class LyricaService {
      * Fetch synced lyrics from Lyrica API
      */
     async fetchLyrics(artist: string, song: string): Promise<LyricLine[] | null> {
+        if (!artist.trim() || !song.trim()) {
+            return null;
+        }
+
         try {
             const params = new URLSearchParams({
                 artist: artist.trim(),
@@ -27,7 +31,7 @@ export class LyricaService {
                 method: 'GET',
                 headers: {
                     'Accept': 'application/json',
-                },
+                }
             });
 
             if (!response.ok) {

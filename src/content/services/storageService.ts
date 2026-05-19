@@ -11,7 +11,11 @@ const STORAGE_PREFIX = 'lyrics_';
 export interface SavedLyrics {
     lines: LyricLine[];
     savedAt: number;
-    source: 'local';
+    source: 'local' | 'lrclib' | 'youtube';
+    originalSource?: string;
+    query?: string;
+    offset?: number;
+    isPreferred?: boolean;
 }
 
 /**
@@ -25,14 +29,16 @@ function getStorageKey(artist: string, title: string): string {
 
 export const storageService = {
     /**
-     * Save lyrics to local storage
+     * Save lyrics to local storage (explicit save by user)
      */
-    async saveLyrics(artist: string, title: string, lines: LyricLine[]): Promise<void> {
+    async saveLyrics(artist: string, title: string, lines: LyricLine[], offset?: number, query?: string): Promise<void> {
         const key = getStorageKey(artist, title);
         const data: SavedLyrics = {
             lines,
             savedAt: Date.now(),
-            source: 'local'
+            source: 'local',
+            offset,
+            query
         };
 
         await chrome.storage.local.set({ [key]: data });
@@ -40,16 +46,34 @@ export const storageService = {
     },
 
     /**
-     * Get lyrics from local storage
+     * Save a preferred choice (lightweight save, reused on next visit)
      */
-    async getSavedLyrics(artist: string, title: string): Promise<LyricLine[] | null> {
+    async savePreferredLyrics(artist: string, title: string, lines: LyricLine[], source: 'local' | 'lrclib' | 'youtube', offset?: number, query?: string): Promise<void> {
+        const key = getStorageKey(artist, title);
+        const data: SavedLyrics = {
+            lines,
+            savedAt: Date.now(),
+            source,
+            isPreferred: true,
+            offset,
+            query
+        };
+
+        await chrome.storage.local.set({ [key]: data });
+        console.log(`[Storage] Saved preferred lyrics for ${artist} - ${title}`);
+    },
+
+    /**
+     * Get lyrics from local storage (either manually saved or preferred)
+     */
+    async getSavedLyrics(artist: string, title: string): Promise<SavedLyrics | null> {
         const key = getStorageKey(artist, title);
         const result = await chrome.storage.local.get(key);
         const data = result[key] as SavedLyrics | undefined;
 
         if (data && data.lines) {
-            console.log(`[Storage] Found saved lyrics for ${artist} - ${title}`);
-            return data.lines;
+            console.log(`[Storage] Found saved/preferred lyrics for ${artist} - ${title}`);
+            return data;
         }
 
         return null;
