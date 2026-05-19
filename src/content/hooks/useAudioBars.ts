@@ -1,111 +1,148 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
+
+// GLOBAL CACHE: Ties the Audio Graph to the physical DOM node, not the React lifecycle.
+// This prevents the dreaded "InvalidStateError" when YouTube reuses the <video> element.
+const audioGraphCache = new WeakMap<HTMLMediaElement, {
+  audioCtx: AudioContext;
+  analyser: AnalyserNode;
+  source: MediaElementAudioSourceNode;
+}>();
 
 function clamp01(n: number) {
   return Math.max(0, Math.min(1, n));
 }
 
 export function useAudioBars(barCount = 32) {
-  const [bars, setBars] = useState<number[]>(
-    Array.from({ length: barCount }, () => 0.12)
-  );
+  // Initialize with a baseline height so bars are always visible
+  const [bars, setBars] = useState<number[]>(Array.from({ length: barCount }, () => 0.05));
+  
+  // Use a ref to track the mathematical state without waiting for React renders in the RAF loop
+  const barsRef = useRef<number[]>(Array.from({ length: barCount }, () => 0.05));
 
   useEffect(() => {
-    let raf = 0;
-    let audioCtx: AudioContext | null = null;
-    let analyser: AnalyserNode | null = null;
-    let source: MediaElementAudioSourceNode | null = null;
-    let data: Uint8Array | null = null;
+    let rafId: number;
+    let analyser: AnalyserNode;
+    let data: Uint8Array;
     let mediaEl: HTMLMediaElement | null = null;
+    let isActive = true;
 
-    const cleanup = () => {
-      if (raf) cancelAnimationFrame(raf);
-      try {
-        source?.disconnect();
-        analyser?.disconnect();
-      } catch {}
-      if (audioCtx && audioCtx.state !== 'closed') {
-        audioCtx.close().catch(() => {});
-      }
-    };
-
-    const start = async () => {
-      mediaEl = document.querySelector('video');
+    const initAudio = () => {
+      mediaEl = document.querySelector('video.html5-main-video, video') as HTMLMediaElement;
+      
       if (!mediaEl) {
-        raf = requestAnimationFrame(start);
+        if (isActive) rafId = requestAnimationFrame(initAudio);
         return;
       }
 
-      audioCtx = new window.AudioContext();
-      if (audioCtx.state === 'suspended') {
-        await audioCtx.resume().catch(() => {});
+      // --- 1. SINGLETON AUDIO GRAPH ---
+      if (!audioGraphCache.has(mediaEl)) {
+        try {
+          const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+          const newAnalyser = audioCtx.createAnalyser();
+          newAnalyser.fftSize = 256;
+          newAnalyser.smoothingTimeConstant = 0.8; 
+
+          const source = audioCtx.createMediaElementSource(mediaEl);
+          source.connect(newAnalyser);
+          newAnalyser.connect(audioCtx.destination);
+
+          audioGraphCache.set(mediaEl, { audioCtx, analyser: newAnalyser, source });
+          console.log('[StreamLyrics] Audio Graph successfully mounted to DOM node.');
+        } catch (e) {
+          console.error('[StreamLyrics] Audio Graph Error - likely a CORS or state issue:', e);
+          return;
+        }
       }
 
-      analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 256;
-      analyser.smoothingTimeConstant = 0.82;
-
-      try {
-        source = audioCtx.createMediaElementSource(mediaEl);
-        source.connect(analyser);
-        analyser.connect(audioCtx.destination);
-      } catch (e) {
-        console.warn('[StreamLyrics] Audio analyser failed', e);
-        return;
-      }
-
+      const cached = audioGraphCache.get(mediaEl)!;
+      analyser = cached.analyser;
       data = new Uint8Array(analyser.frequencyBinCount);
-      let smoothBars = Array.from({ length: barCount }, () => 0);
 
+      // --- 2. THE RENDER LOOP ---
       const tick = () => {
-        if (!analyser || !data) return;
+        if (!isActive || !analyser || !data) return;
 
+        // Auto-resume context if browser suspended it during SPA nav
+        if (cached.audioCtx.state === 'suspended' && !mediaEl?.paused) {
+            cached.audioCtx.resume();
+        }
+
+        if (mediaEl?.paused) {
+          // SOFTWARE DECAY: Smoothly drop bars to baseline when paused instead of CSS freezing
+          let settled = true;
+          barsRef.current = barsRef.current.map(val => {
+            const nextVal = Math.max(0.05, val * 0.85); // 15% decay per frame
+            if (nextVal > 0.051) settled = false;
+            return nextVal;
+          });
+
+          setBars([...barsRef.current]);
+
+          // Sleep the RAF loop completely if all bars have visually settled
+          if (!settled) {
+            rafId = requestAnimationFrame(tick);
+          }
+          return; 
+        }
+
+        // --- FFT Math ---
         analyser.getByteFrequencyData(data as any);
+        const usefulBins = Math.floor(data.length * 0.6);
 
-        const usefulBins = Math.floor(data!.length * 0.6); // Use up to 60% of frequencies
         const nextBars = Array.from({ length: barCount }, (_, i) => {
           const half = barCount / 2;
+          const centerDist = (i < half) ? (half - 1 - i) / (half - 1) : (i - half) / (half - 1);
           
-          // Determine normalized distance from the center (0 = center, 1 = edge)
-          const centerDist = (i < half) 
-             ? (half - 1 - i) / (half - 1)
-             : (i - half) / (half - 1);
-          
-          // Exponential mapping: dedicates more bars to bass frequencies (logarithmic human hearing)
           const binIndex = Math.floor(Math.pow(centerDist, 1.5) * usefulBins);
-          
-          // Average adjacent bins. We use a wider window for higher frequencies (edges) to smooth them
           const windowSize = Math.max(1, Math.floor(centerDist * 3)); 
-          let sum = 0;
-          let count = 0;
-          for (let j = Math.max(0, binIndex - windowSize); j <= Math.min(data!.length - 1, binIndex + windowSize); j++) {
-            sum += data![j];
+          
+          let sum = 0, count = 0;
+          const start = Math.max(0, binIndex - windowSize);
+          const end = Math.min(data.length - 1, binIndex + windowSize);
+          
+          for (let j = start; j <= end; j++) {
+            sum += data[j];
             count++;
           }
+          
           const avg = count ? sum / count : 0;
-          
-          // Gentle EQ boost for treble (outer edges) so they aren't completely dead
           const eqBoost = 1 + (centerDist * 0.8); 
-          
           const raw = (avg / 255) * eqBoost;
-          const normalized = clamp01(raw);
           
-          // Base height of 0.05 so bars never disappear
-          return 0.05 + normalized * 0.95;
+          return 0.05 + clamp01(raw) * 0.95;
         });
         
-        // Smooth interpolation
-        smoothBars = smoothBars.map((prev, i) => prev * 0.8 + nextBars[i] * 0.2);
+        // Mathematical interpolation
+        barsRef.current = barsRef.current.map((prev, i) => prev * 0.7 + nextBars[i] * 0.3);
+        setBars([...barsRef.current]);
 
-        setBars(smoothBars);
-        raf = requestAnimationFrame(tick);
+        rafId = requestAnimationFrame(tick);
       };
 
-      tick();
+      // Start the loop
+      rafId = requestAnimationFrame(tick);
+
+      // Event listener to wake up the RAF loop if it went to sleep during pause
+      const handlePlay = () => {
+        if (cached.audioCtx.state === 'suspended') cached.audioCtx.resume();
+        cancelAnimationFrame(rafId);
+        rafId = requestAnimationFrame(tick);
+      };
+
+      mediaEl.addEventListener('play', handlePlay);
+
+      // Cleanup listener attached directly to the element we captured
+      return () => mediaEl?.removeEventListener('play', handlePlay);
     };
 
-    start();
+    const cleanupListener = initAudio();
 
-    return cleanup;
+    return () => {
+      isActive = false;
+      cancelAnimationFrame(rafId);
+      if (cleanupListener) cleanupListener();
+      // WE DO NOT DISCONNECT THE AUDIO GRAPH HERE. It belongs to the DOM node now.
+    };
   }, [barCount]);
 
   return bars;

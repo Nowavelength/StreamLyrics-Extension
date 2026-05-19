@@ -674,14 +674,7 @@ function getStyles(): string {
       width: 4px;
       border-radius: 999px;
       background: rgba(255, 255, 255, 0.82);
-      transition: height 90ms linear, opacity 90ms linear;
       will-change: height;
-    }
-
-    .visualizer.paused .viz-bar {
-      height: 4px !important;
-      opacity: 0.4;
-      transition: all 0.3s ease;
     }
 
     /* Player Controls */

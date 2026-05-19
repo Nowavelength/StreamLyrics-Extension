@@ -477,7 +477,7 @@ export const Panel: React.FC<PanelProps> = ({ isVisible, isPipMode, pipWindow, o
             {/* Bottom Player Dock */}
             <div className="player-dock">
                 {/* Animated visualizer bars */}
-                <div className={`visualizer ${isPaused ? 'paused' : ''}`} aria-hidden="true">
+                <div className="visualizer" aria-hidden="true">
                     {bars.map((h, i) => (
                         <span key={i} className="viz-bar" style={{ height: `${Math.max(4, h * 28)}px`, animationDelay: `${i * 0.04}s` }} />
                     ))}
