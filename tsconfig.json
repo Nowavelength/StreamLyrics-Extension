@@ -26,6 +26,10 @@
     "include": [
         "src"
     ],
+    "exclude": [
+        "src/content/components/Panel.backup.tsx",
+        "**/*.backup.tsx"
+    ],
     "references": [
         {
             "path": "./tsconfig.node.json"

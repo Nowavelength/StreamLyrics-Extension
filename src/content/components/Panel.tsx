@@ -8,7 +8,10 @@ import { useAudioBars } from '../hooks/useAudioBars';
 import { PrevIcon, NextIcon, PlayIcon, PauseIcon, RewindIcon, FastForwardIcon, SearchIcon, DownloadIcon, RefreshIcon } from './icons';
 import { LyricsSource } from '../services/transcriptService';
 import { storageService } from '../services/storageService';
-import { cleanVideoTitle, getCurrentTrackInfo, getLyricsSearchTitle } from '../utils/transcriptParser';
+import { cleanVideoTitle, getCurrentTrackInfo, getLyricsSearchTitle, getVideoId } from '../utils/transcriptParser';
+import { getThumbnailUrl } from '../utils/colorExtractor';
+import { AbstractThumbnail } from './AbstractThumbnail';
+
 
 interface PanelProps {
     isVisible: boolean;
@@ -19,10 +22,39 @@ interface PanelProps {
 }
 
 const INSTRUMENTAL_GAP_THRESHOLD = 10; // seconds
-const MIN_WIDTH = 280;
+const MIN_WIDTH = 180; // Allow shrinking to ultra mode
 const MAX_WIDTH = 700;
-const MIN_HEIGHT = 200;
+const MIN_HEIGHT = 120; // Allow shrinking to compact heights
 const MAX_HEIGHT = 800;
+
+const THRESHOLD_MINI_ENTER = 360;
+const THRESHOLD_MINI_EXIT = 380;
+const THRESHOLD_ULTRA_ENTER = 240;
+const THRESHOLD_ULTRA_EXIT = 260;
+
+export type PlayerMode = 'full' | 'mini' | 'ultra';
+
+// Hysteresis transition solver
+export const getNextPlayerMode = (width: number, height: number, currentMode: PlayerMode): PlayerMode => {
+    // Height takes absolute precedence to resolve vertical collision glitches
+    if (height <= 180) return 'ultra';
+    if (height <= 300) return 'mini';
+
+    if (currentMode === 'full') {
+        if (width <= THRESHOLD_MINI_ENTER) {
+            return width <= THRESHOLD_ULTRA_ENTER ? 'ultra' : 'mini';
+        }
+    } else if (currentMode === 'mini') {
+        if (width > THRESHOLD_MINI_EXIT) return 'full';
+        if (width <= THRESHOLD_ULTRA_ENTER) return 'ultra';
+    } else if (currentMode === 'ultra') {
+        if (width > THRESHOLD_ULTRA_EXIT) {
+            return width > THRESHOLD_MINI_EXIT ? 'full' : 'mini';
+        }
+    }
+    return currentMode;
+};
+
 
 /**
  * Main lyrics panel component - PIP-style (draggable + resizable)
@@ -44,13 +76,176 @@ export const Panel: React.FC<PanelProps> = ({ isVisible, isPipMode, pipWindow, o
     const [isResizing, setIsResizing] = useState<string | null>(null); // 'nw', 'ne', 'sw', 'se', 'n', 's', 'e', 'w'
     const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
 
+    // Track width/height reactively for both in-page and Picture-in-Picture resizing
+    const [pipWidth, setPipWidth] = useState(window.innerWidth);
+    const [pipHeight, setPipHeight] = useState(window.innerHeight);
+
+    const activeWidth = isPipMode ? pipWidth : panelWidth;
+    const activeHeight = isPipMode ? pipHeight : panelHeight;
+
+    const [playerMode, setPlayerMode] = useState<PlayerMode>(() => getNextPlayerMode(activeWidth, activeHeight, 'full'));
+
+    useEffect(() => {
+        if (!isPipMode || !pipWindow) return;
+        setPipWidth(pipWindow.innerWidth);
+        setPipHeight(pipWindow.innerHeight);
+
+        let resizeTimeout: number;
+        const handlePipResize = () => {
+            setPipWidth(pipWindow.innerWidth);
+            setPipHeight(pipWindow.innerHeight);
+
+            // Debounce snap resizing to perfectly justified bounds
+            clearTimeout(resizeTimeout);
+            resizeTimeout = window.setTimeout(() => {
+                const currentMode = getNextPlayerMode(pipWindow.innerWidth, pipWindow.innerHeight, playerMode);
+                try {
+                    if (currentMode === 'mini') {
+                        pipWindow.resizeTo(280, 320);
+                    } else if (currentMode === 'ultra') {
+                        if (pipWindow.innerHeight < 220) {
+                            pipWindow.resizeTo(280, 110);
+                        } else {
+                            pipWindow.resizeTo(200, 220);
+                        }
+                    }
+                } catch (e) {
+                    console.warn('[StreamLyrics] Failed to resize PiP window:', e);
+                }
+            }, 200);
+        };
+        pipWindow.addEventListener('resize', handlePipResize);
+        return () => {
+            pipWindow.removeEventListener('resize', handlePipResize);
+            clearTimeout(resizeTimeout);
+        };
+    }, [isPipMode, pipWindow, playerMode]);
+
+    useEffect(() => {
+        setPlayerMode(prev => getNextPlayerMode(activeWidth, activeHeight, prev));
+    }, [activeWidth, activeHeight]);
+
+    // Zero-polling metadata and artwork single-trigger tracker
+    const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
+
     const { lines, isLoading, error, source, currentTitle, refetch, searchManual, switchSource, tryNextResult, hasMoreResults } = useTranscript();
     const { currentLineIndex, isPaused, currentTime, offset, seekTo, adjustOffset, resetOffset, togglePlayPause } = useVideoSync(lines);
-    const backgroundColor = useDominantColor();
+    const backgroundColor = useDominantColor(thumbnailUrl);
     const bars = useAudioBars(32);
     const [manualArtist, setManualArtist] = useState('');
     const [manualTrack, setManualTrack] = useState('');
     const [isSearchVisible, setIsSearchVisible] = useState(false);
+
+    // 90/10 Spring-like mathematical dimension smoothing
+    const [smoothWidth, setSmoothWidth] = useState(activeWidth);
+    const [smoothHeight, setSmoothHeight] = useState(activeHeight);
+
+    useEffect(() => {
+        let rafId: number;
+        const step = () => {
+            setSmoothWidth(prev => {
+                const diff = activeWidth - prev;
+                if (Math.abs(diff) < 0.1) return activeWidth;
+                return prev + diff * 0.1;
+            });
+            setSmoothHeight(prev => {
+                const diff = activeHeight - prev;
+                if (Math.abs(diff) < 0.1) return activeHeight;
+                return prev + diff * 0.1;
+            });
+            rafId = requestAnimationFrame(step);
+        };
+        rafId = requestAnimationFrame(step);
+        return () => cancelAnimationFrame(rafId);
+    }, [activeWidth, activeHeight]);
+
+    // Snap panel state dimensions to perfectly justified compact sizes
+    useEffect(() => {
+        if (isPipMode) return;
+        if (isDragging || isResizing) return;
+
+        if (playerMode === 'mini') {
+            setPanelWidth(280);
+            setPanelHeight(320);
+        } else if (playerMode === 'ultra') {
+            if (activeHeight < 220) {
+                setPanelWidth(260);
+                setPanelHeight(110);
+            } else {
+                setPanelWidth(200);
+                setPanelHeight(220);
+            }
+        }
+    }, [playerMode, isDragging, isResizing, isPipMode, activeHeight < 220]);
+
+    // Auto-resize Picture-in-Picture window to match the justified aspect ratios of compact modes
+    useEffect(() => {
+        if (!isPipMode || !pipWindow) return;
+
+        try {
+            if (playerMode === 'mini') {
+                pipWindow.resizeTo(280, 320);
+            } else if (playerMode === 'ultra') {
+                if (activeHeight < 220) {
+                    pipWindow.resizeTo(280, 110);
+                } else {
+                    pipWindow.resizeTo(200, 220);
+                }
+            }
+        } catch (e) {
+            console.warn('[StreamLyrics] Failed to resize PiP window:', e);
+        }
+    }, [playerMode, isPipMode, pipWindow, activeHeight < 220]);
+
+    const updateThumbnailUrl = useCallback(() => {
+        const ytMusicThumb = document.querySelector('ytmusic-player-bar img.image') as HTMLImageElement;
+        if (ytMusicThumb?.src) {
+            setThumbnailUrl(ytMusicThumb.src);
+            return;
+        }
+
+        const ytMusicArt = document.querySelector('.ytmusic-player img') as HTMLImageElement;
+        if (ytMusicArt?.src) {
+            setThumbnailUrl(ytMusicArt.src);
+            return;
+        }
+
+        const videoId = getVideoId();
+        if (videoId) {
+            setThumbnailUrl(getThumbnailUrl(videoId));
+            return;
+        }
+
+        setThumbnailUrl(null);
+    }, []);
+
+    useEffect(() => {
+        updateThumbnailUrl();
+        const timer1 = setTimeout(updateThumbnailUrl, 500);
+        const timer2 = setTimeout(updateThumbnailUrl, 1500);
+        return () => {
+            clearTimeout(timer1);
+            clearTimeout(timer2);
+        };
+    }, [currentTitle, isLoading, updateThumbnailUrl]);
+
+    // Cleaned track details
+    const videoTitle = getLyricsSearchTitle(getCurrentTrackInfo());
+    const { artist: cleanArtist, track: cleanTrack } = cleanVideoTitle(currentTitle || videoTitle);
+
+    // Dynamic width restore expander
+    const handleExpand = useCallback(() => {
+        setPanelWidth(400);
+        setPanelHeight(500);
+        if (isPipMode && pipWindow) {
+            try {
+                pipWindow.resizeTo(400, 500);
+            } catch (e) {
+                console.warn('[StreamLyrics] Failed to resize PiP window:', e);
+            }
+        }
+    }, [isPipMode, pipWindow]);
+
 
     /** Skip video forward/backward by N seconds */
     const skipVideo = useCallback((delta: number) => {
@@ -73,11 +268,18 @@ export const Panel: React.FC<PanelProps> = ({ isVisible, isPipMode, pipWindow, o
      * Start dragging the panel
      */
     const handleDragStart = useCallback((e: React.MouseEvent) => {
-        if ((e.target as HTMLElement).closest('.resize-handle, .offset-btn, .source-btn, .lyric-line, .manual-search, .retry-btn, .player-dock')) return;
+        const target = e.target as HTMLElement;
+        
+        // Prevent drag on resize handles and interactive buttons/inputs
+        if (target.closest('.resize-handle, .offset-btn, .source-btn, .lyric-line, .manual-search, .retry-btn, .player-btn')) return;
+        
+        // In full mode, don't allow dragging from player-dock
+        if (playerMode === 'full' && target.closest('.player-dock')) return;
+
         e.preventDefault();
         setIsDragging(true);
         setDragOffset({ x: e.clientX - panelX, y: e.clientY - panelY });
-    }, [panelX, panelY]);
+    }, [panelX, panelY, playerMode]);
 
     /**
      * Start resizing from a corner/edge
@@ -275,12 +477,12 @@ export const Panel: React.FC<PanelProps> = ({ isVisible, isPipMode, pipWindow, o
         overflow: 'hidden',
     } : {
         backgroundColor,
-        width: `${panelWidth}px`,
-        height: `${panelHeight}px`,
+        width: `${smoothWidth}px`,
+        height: `${smoothHeight}px`,
         left: `${panelX}px`,
         top: `${panelY}px`,
         position: 'fixed' as const,
-        cursor: isDragging ? 'grabbing' : 'default',
+        cursor: isDragging ? 'grabbing' : (playerMode === 'full' ? 'default' : 'grab'),
     };
 
     const renderPanel = (content: React.ReactElement) => {
@@ -293,10 +495,11 @@ export const Panel: React.FC<PanelProps> = ({ isVisible, isPipMode, pipWindow, o
 
     // Loading state
     if (isLoading) {
+        const isHorizontal = activeHeight < 220;
         return renderPanel(
             <div
                 ref={panelRef}
-                className={`streamlyrics-panel pip-mode ${isVisible ? '' : 'hidden'}`}
+                className={`streamlyrics-panel pip-mode ${isVisible ? '' : 'hidden'} mode-${playerMode} ${isHorizontal ? 'layout-horizontal' : ''}`}
                 style={panelStyle}
                 onMouseDown={!isPipMode ? handleDragStart : undefined}
             >
@@ -322,10 +525,11 @@ export const Panel: React.FC<PanelProps> = ({ isVisible, isPipMode, pipWindow, o
 
     // No lyrics state
     if (lines.length === 0) {
+        const isHorizontal = activeHeight < 220;
         return renderPanel(
             <div
                 ref={panelRef}
-                className={`streamlyrics-panel pip-mode ${isVisible ? '' : 'hidden'}`}
+                className={`streamlyrics-panel pip-mode ${isVisible ? '' : 'hidden'} mode-${playerMode} ${isHorizontal ? 'layout-horizontal' : ''}`}
                 style={panelStyle}
                 onMouseDown={!isPipMode ? handleDragStart : undefined}
             >
@@ -361,10 +565,11 @@ export const Panel: React.FC<PanelProps> = ({ isVisible, isPipMode, pipWindow, o
     }
 
     // Build the panel content
+    const isHorizontal = activeHeight < 220;
     const panelContent = (
         <div
             ref={panelRef}
-            className={`streamlyrics-panel ${isPipMode ? 'in-pip-window' : 'pip-style'} ${isVisible ? '' : 'hidden'} ${isDragging || isResizing ? 'interacting' : ''}`}
+            className={`streamlyrics-panel ${isPipMode ? 'in-pip-window' : 'pip-style'} ${isVisible ? '' : 'hidden'} ${isDragging || isResizing ? 'interacting' : ''} mode-${playerMode} ${isHorizontal ? 'layout-horizontal' : ''}`}
             style={panelStyle}
             onMouseDown={!isPipMode ? handleDragStart : undefined}
         >
@@ -483,22 +688,49 @@ export const Panel: React.FC<PanelProps> = ({ isVisible, isPipMode, pipWindow, o
                     ))}
                 </div>
 
+                {/* Apple-style Album Art / Metadata Cockpit for Compact & Ultra Modes */}
+                <div className="metadata-cockpit">
+                    <div className="thumbnail-container">
+                        {thumbnailUrl ? (
+                            <img src={thumbnailUrl} alt="Album Art" className="album-art" draggable="false" />
+                        ) : (
+                            <AbstractThumbnail size={playerMode === 'ultra' ? 36 : 56} />
+                        )}
+                    </div>
+                    <div className="track-info">
+                        <div className="track-title" title={cleanTrack}>
+                            {cleanTrack || currentTitle || 'No title'}
+                        </div>
+                        <div className="track-artist" title={cleanArtist}>
+                            {cleanArtist || 'Unknown artist'}
+                        </div>
+                    </div>
+                </div>
+
                 {/* Playback buttons */}
                 <div className="player-controls">
-                    <button className="player-btn" onClick={prevSong} title="Previous song" aria-label="Previous">
+                    <button className="player-btn player-btn-prev" onClick={prevSong} title="Previous song" aria-label="Previous">
                         <PrevIcon />
                     </button>
-                    <button className="player-btn" onClick={() => skipVideo(-5)} title="Rewind 5s" aria-label="Rewind">
+                    <button className="player-btn player-btn-rewind" onClick={() => skipVideo(-5)} title="Rewind 5s" aria-label="Rewind">
                         <RewindIcon />
                     </button>
                     <button className="player-btn player-btn-play" onClick={togglePlayPause} title={isPaused ? 'Play' : 'Pause'} aria-label={isPaused ? 'Play' : 'Pause'}>
-                        {isPaused ? <PlayIcon size={22} /> : <PauseIcon size={22} />}
+                        {isPaused ? <PlayIcon size={playerMode === 'ultra' ? 18 : 22} /> : <PauseIcon size={playerMode === 'ultra' ? 18 : 22} />}
                     </button>
-                    <button className="player-btn" onClick={() => skipVideo(5)} title="Forward 5s" aria-label="Forward">
+                    <button className="player-btn player-btn-forward" onClick={() => skipVideo(5)} title="Forward 5s" aria-label="Forward">
                         <FastForwardIcon />
                     </button>
-                    <button className="player-btn" onClick={nextSong} title="Next song" aria-label="Next">
+                    <button className="player-btn player-btn-next" onClick={nextSong} title="Next song" aria-label="Next">
                         <NextIcon />
+                    </button>
+                    <button className="player-btn player-btn-expand" onClick={handleExpand} title="Expand to Full Player" aria-label="Expand">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="15 3 21 3 21 9"></polyline>
+                            <polyline points="9 21 3 21 3 15"></polyline>
+                            <line x1="21" y1="3" x2="14" y2="10"></line>
+                            <line x1="3" y1="21" x2="10" y2="14"></line>
+                        </svg>
                     </button>
                 </div>
             </div>

@@ -121,6 +121,7 @@ function getStyles(): string {
     .streamlyrics-panel.interacting {
       user-select: none;
       box-shadow: 0 12px 48px rgba(0,0,0,0.6);
+      transition: none !important; /* Lock resizing frame to mouse speed */
     }
 
     /* Drag Handle Bar */
@@ -725,8 +726,319 @@ function getStyles(): string {
       transform: scale(1.04);
       background: #f4f4f4;
     }
+
+    /* Responsive Mini & Ultra Player Modes CSS rules */
+
+    /* Hide resize handles in compact player modes since they snap to fixed shapes */
+    .mode-mini .resize-handle,
+    .mode-ultra .resize-handle {
+      display: none !important;
+      pointer-events: none !important;
+    }
+
+    /* Lock in-page panel to strict, visually justified compact shapes to prevent large grey containers */
+    .pip-style.mode-mini {
+      width: 280px !important;
+      height: 320px !important;
+      min-width: 280px !important;
+      max-width: 280px !important;
+      min-height: 320px !important;
+      max-height: 320px !important;
+    }
+
+    .pip-style.mode-ultra {
+      width: 200px !important;
+      height: 220px !important;
+      min-width: 200px !important;
+      max-width: 200px !important;
+      min-height: 220px !important;
+      max-height: 220px !important;
+    }
+
+    /* Horizontal compact layout strict bounds */
+    .pip-style.layout-horizontal {
+      width: 280px !important;
+      height: 110px !important;
+      min-width: 280px !important;
+      max-width: 280px !important;
+      min-height: 110px !important;
+      max-height: 110px !important;
+    }
+
+    /* Prevent native dragging and text selections from hijacking custom panel movement */
+    .metadata-cockpit,
+    .player-dock {
+      user-select: none !important;
+      -webkit-user-drag: none !important;
+    }
+    
+    /* Collapsing lyrics, offsets, search, source header, and drag handle in compact modes */
+    .mode-mini .streamlyrics-scroll-container,
+    .mode-ultra .streamlyrics-scroll-container,
+    .mode-mini .offset-controls,
+    .mode-ultra .offset-controls,
+    .mode-mini .source-header,
+    .mode-ultra .source-header,
+    .mode-mini .drag-handle,
+    .mode-ultra .drag-handle {
+      height: 0 !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      opacity: 0 !important;
+      pointer-events: none !important;
+      overflow: hidden !important;
+      border: none !important;
+    }
+
+    /* Seamless flex layouts for the compact player dashboards */
+    .mode-mini.streamlyrics-panel,
+    .mode-ultra.streamlyrics-panel {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      transition: width 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), height 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), background-color 0.4s ease;
+    }
+
+    .mode-mini .player-dock,
+    .mode-ultra .player-dock {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background: transparent;
+      padding: 16px;
+      box-sizing: border-box;
+    }
+
+    /* Full Mode Hide metadata-cockpit and expand btn */
+    .mode-full .metadata-cockpit {
+      display: none !important;
+    }
+    .mode-full .player-btn-expand {
+      display: none !important;
+    }
+
+    /* MINI PLAYER MODE */
+    .mode-mini .visualizer {
+      display: none !important;
+    }
+    .mode-mini .player-btn-expand {
+      display: none !important;
+    }
+    .mode-mini .metadata-cockpit {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      margin-bottom: 16px;
+      width: 100%;
+      animation: fadeIn 0.3s ease;
+    }
+    .mode-mini .thumbnail-container {
+      width: 64px;
+      height: 64px;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+      margin-bottom: 12px;
+      background: rgba(255,255,255,0.05);
+      transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+    }
+    .mode-mini .thumbnail-container:hover {
+      transform: scale(1.04);
+    }
+    .mode-mini .album-art {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .mode-mini .track-info {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      width: 100%;
+      padding: 0 12px;
+      box-sizing: border-box;
+    }
+    .mode-mini .track-title {
+      font-size: 15px;
+      font-weight: 800;
+      color: #fff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .mode-mini .track-artist {
+      font-size: 12px;
+      font-weight: 600;
+      color: rgba(255,255,255,0.6);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .mode-mini .player-controls {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+    }
+
+    /* ULTRA COMPACT PLAYER MODE */
+    .mode-ultra .visualizer {
+      display: none !important;
+    }
+    /* Hide Next, Prev, Rewind, and Forward buttons in ultra mode */
+    .mode-ultra .player-btn-prev,
+    .mode-ultra .player-btn-rewind,
+    .mode-ultra .player-btn-forward,
+    .mode-ultra .player-btn-next {
+      display: none !important;
+    }
+    .mode-ultra .metadata-cockpit {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      margin-bottom: 12px;
+      width: 100%;
+      animation: fadeIn 0.3s ease;
+    }
+    .mode-ultra .thumbnail-container {
+      width: 56px;
+      height: 56px;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.45);
+      margin-bottom: 8px;
+      background: rgba(255,255,255,0.05);
+      transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+    }
+    .mode-ultra .thumbnail-container:hover {
+      transform: scale(1.04);
+    }
+    .mode-ultra .album-art {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .mode-ultra .track-info {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      width: 100%;
+      padding: 0 16px;
+      box-sizing: border-box;
+    }
+    .mode-ultra .track-title {
+      font-size: 13px;
+      font-weight: 800;
+      color: #fff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .mode-ultra .track-artist {
+      font-size: 11px;
+      font-weight: 600;
+      color: rgba(255,255,255,0.6);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .mode-ultra .player-controls {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 14px;
+      width: 100%;
+    }
+    .mode-ultra .player-btn-play {
+      width: 40px;
+      height: 40px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+    .mode-ultra .player-btn-expand {
+      display: grid !important;
+      place-items: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.1);
+      color: rgba(255, 255, 255, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      transition: all 0.2s ease;
+    }
+    .mode-ultra .player-btn-expand:hover {
+      background: rgba(255, 255, 255, 0.2);
+      color: #fff;
+      transform: scale(1.08);
+    }
+
+    /* Horizontal Layout for Low Heights */
+    .streamlyrics-panel.layout-horizontal .player-dock {
+      flex-direction: row !important;
+      justify-content: space-between !important;
+      align-items: center !important;
+      padding: 10px 14px !important;
+      gap: 12px !important;
+      height: 100% !important;
+      box-sizing: border-box !important;
+    }
+
+    .streamlyrics-panel.layout-horizontal .metadata-cockpit {
+      flex-direction: row !important;
+      align-items: center !important;
+      text-align: left !important;
+      margin-bottom: 0 !important;
+      flex: 1 !important;
+      min-width: 0 !important;
+      gap: 10px !important;
+    }
+
+    .streamlyrics-panel.layout-horizontal .thumbnail-container {
+      width: 40px !important;
+      height: 40px !important;
+      margin-bottom: 0 !important;
+      border-radius: 6px !important;
+      flex-shrink: 0 !important;
+    }
+
+    .streamlyrics-panel.layout-horizontal .track-info {
+      text-align: left !important;
+      padding: 0 !important;
+      min-width: 0 !important;
+    }
+
+    .streamlyrics-panel.layout-horizontal .track-title {
+      font-size: 13px !important;
+      font-weight: 800 !important;
+      margin-bottom: 2px !important;
+    }
+
+    .streamlyrics-panel.layout-horizontal .track-artist {
+      font-size: 11px !important;
+      font-weight: 600 !important;
+    }
+
+    .streamlyrics-panel.layout-horizontal .player-controls {
+      margin-top: 0 !important;
+      gap: 10px !important;
+      flex-shrink: 0 !important;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
   `;
 }
+
+
 
 // NOTE: We don't call init() on load anymore to support click-to-activate.
 // Instead we wait for the message in the listener above.
