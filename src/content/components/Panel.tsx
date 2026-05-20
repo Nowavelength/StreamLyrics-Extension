@@ -13,46 +13,109 @@ import { getThumbnailUrl } from '../utils/colorExtractor';
 import { AbstractThumbnail } from './AbstractThumbnail';
 
 
+import { Settings } from '../hooks/useSettings';
+
 interface PanelProps {
     isVisible: boolean;
     isPipMode: boolean;
     pipWindow: Window | null;
     onOpenPip: () => void;
     onClosePip: () => void;
+    settings: Settings;
 }
 
 const INSTRUMENTAL_GAP_THRESHOLD = 10; // seconds
-const MIN_WIDTH = 180; // Allow shrinking to ultra mode
+const MIN_WIDTH = 180;
 const MAX_WIDTH = 700;
-const MIN_HEIGHT = 120; // Allow shrinking to compact heights
+const MIN_HEIGHT = 48;
 const MAX_HEIGHT = 800;
 
-const THRESHOLD_MINI_ENTER = 360;
-const THRESHOLD_MINI_EXIT = 380;
-const THRESHOLD_ULTRA_ENTER = 240;
-const THRESHOLD_ULTRA_EXIT = 260;
+// Sizing Area & Height thresholds for fluid adaptive stages
+const THRESHOLD_ULTRA_ENTER_HEIGHT = 80; // Height-only trigger for Mini Player (capsule pill - ultra)
+const THRESHOLD_ULTRA_EXIT_HEIGHT = 100;
+
+// In-between Player (square card - mini) thresholds
+const THRESHOLD_MINI_ENTER_AREA = 135000; // Fluid composite area trigger
+const THRESHOLD_MINI_EXIT_AREA = 155000;
 
 export type PlayerMode = 'full' | 'mini' | 'ultra';
 
-// Hysteresis transition solver
-export const getNextPlayerMode = (width: number, height: number, currentMode: PlayerMode): PlayerMode => {
-    // Height takes absolute precedence to resolve vertical collision glitches
-    if (height <= 180) return 'ultra';
-    if (height <= 300) return 'mini';
+// Spotify custom SVG and icon helper components
+const GripGrid2x4: React.FC = () => (
+    <svg width="12" height="6" viewBox="0 0 12 6" fill="currentColor" style={{ opacity: 0.4, display: 'block' }}>
+        <circle cx="1" cy="1" r="1" />
+        <circle cx="4" cy="1" r="1" />
+        <circle cx="7" cy="1" r="1" />
+        <circle cx="10" cy="1" r="1" />
+        <circle cx="1" cy="5" r="1" />
+        <circle cx="4" cy="5" r="1" />
+        <circle cx="7" cy="5" r="1" />
+        <circle cx="10" cy="5" r="1" />
+    </svg>
+);
 
-    if (currentMode === 'full') {
-        if (width <= THRESHOLD_MINI_ENTER) {
-            return width <= THRESHOLD_ULTRA_ENTER ? 'ultra' : 'mini';
-        }
-    } else if (currentMode === 'mini') {
-        if (width > THRESHOLD_MINI_EXIT) return 'full';
-        if (width <= THRESHOLD_ULTRA_ENTER) return 'ultra';
-    } else if (currentMode === 'ultra') {
-        if (width > THRESHOLD_ULTRA_EXIT) {
-            return width > THRESHOLD_MINI_EXIT ? 'full' : 'mini';
-        }
+const GripGrid2x3: React.FC = () => (
+    <svg width="6" height="10" viewBox="0 0 6 10" fill="currentColor" style={{ opacity: 0.4, display: 'block' }}>
+        <circle cx="1" cy="2" r="1" />
+        <circle cx="1" cy="5" r="1" />
+        <circle cx="1" cy="8" r="1" />
+        <circle cx="5" cy="2" r="1" />
+        <circle cx="5" cy="5" r="1" />
+        <circle cx="5" cy="8" r="1" />
+    </svg>
+);
+
+const Rewind5Icon: React.FC = () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
+        <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+        <path d="M3 3v5h5" />
+        <text x="12" y="15" fontSize="8" fontWeight="bold" fill="currentColor" textAnchor="middle" stroke="none">5</text>
+    </svg>
+);
+
+const Forward5Icon: React.FC = () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
+        <path d="M21 12a9 9 0 1 1-9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+        <path d="M21 3v5h-5" />
+        <text x="12" y="15" fontSize="8" fontWeight="bold" fill="currentColor" textAnchor="middle" stroke="none">5</text>
+    </svg>
+);
+
+// Hysteresis transition solver - based on available area / usable space and height-only mini trigger
+export const getNextPlayerMode = (width: number, height: number, currentMode: PlayerMode): PlayerMode => {
+    const area = width * height;
+    
+    // 1. Ultra (Capsule Pill / Mini Player) - PURELY HEIGHT-BASED
+    const shouldBeUltra = height <= (currentMode === 'ultra' ? THRESHOLD_ULTRA_EXIT_HEIGHT : THRESHOLD_ULTRA_ENTER_HEIGHT);
+    
+    if (shouldBeUltra) {
+        return 'ultra';
     }
-    return currentMode;
+    
+    // 2. Mini (Square Card / In-between Player) - STRICTLY AREA-BASED
+    const shouldBeMini = area <= THRESHOLD_MINI_ENTER_AREA;
+    
+    if (currentMode === 'ultra') {
+        // We are exiting ultra (height > THRESHOLD_ULTRA_EXIT_HEIGHT).
+        // Determine whether to go to mini or full based on area/usable space.
+        return shouldBeMini ? 'mini' : 'full';
+    }
+    
+    if (currentMode === 'mini') {
+        // We are in mini mode. We stay in mini unless area allows us to exit.
+        const canExitMini = area > THRESHOLD_MINI_EXIT_AREA;
+        if (!canExitMini) {
+            return 'mini';
+        }
+        return 'full';
+    }
+    
+    // We are in full mode. Check if we should enter mini.
+    if (shouldBeMini) {
+        return 'mini';
+    }
+    
+    return 'full';
 };
 
 
@@ -60,13 +123,13 @@ export const getNextPlayerMode = (width: number, height: number, currentMode: Pl
  * Main lyrics panel component - PIP-style (draggable + resizable)
  * Can render in-page or in a floating PIP window
  */
-export const Panel: React.FC<PanelProps> = ({ isVisible, isPipMode, pipWindow, onOpenPip, onClosePip }) => {
+export const Panel: React.FC<PanelProps> = ({ isVisible, isPipMode, pipWindow, onOpenPip, onClosePip, settings }) => {
     const scrollRef = useRef<HTMLDivElement>(null);
     const lineRefs = useRef<(HTMLDivElement | null)[]>([]);
     const panelRef = useRef<HTMLDivElement>(null);
 
     // Panel dimensions and position
-    const [panelWidth, setPanelWidth] = useState(380);
+    const [panelWidth, setPanelWidth] = useState(settings?.panelWidth ?? 380);
     const [panelHeight, setPanelHeight] = useState(500);
     const [panelX, setPanelX] = useState(window.innerWidth - 400);
     const [panelY, setPanelY] = useState(80);
@@ -75,6 +138,15 @@ export const Panel: React.FC<PanelProps> = ({ isVisible, isPipMode, pipWindow, o
     const [isDragging, setIsDragging] = useState(false);
     const [isResizing, setIsResizing] = useState<string | null>(null); // 'nw', 'ne', 'sw', 'se', 'n', 's', 'e', 'w'
     const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+
+    // Sync settings panel width reactively only when the storage value actually changes from outside
+    const lastStoredWidth = useRef(settings?.panelWidth ?? 380);
+    useEffect(() => {
+        if (settings?.panelWidth && settings.panelWidth !== lastStoredWidth.current) {
+            lastStoredWidth.current = settings.panelWidth;
+            setPanelWidth(settings.panelWidth);
+        }
+    }, [settings?.panelWidth]);
 
     // Track width/height reactively for both in-page and Picture-in-Picture resizing
     const [pipWidth, setPipWidth] = useState(window.innerWidth);
@@ -90,39 +162,20 @@ export const Panel: React.FC<PanelProps> = ({ isVisible, isPipMode, pipWindow, o
         setPipWidth(pipWindow.innerWidth);
         setPipHeight(pipWindow.innerHeight);
 
-        let resizeTimeout: number;
         const handlePipResize = () => {
             setPipWidth(pipWindow.innerWidth);
             setPipHeight(pipWindow.innerHeight);
-
-            // Debounce snap resizing to perfectly justified bounds
-            clearTimeout(resizeTimeout);
-            resizeTimeout = window.setTimeout(() => {
-                const currentMode = getNextPlayerMode(pipWindow.innerWidth, pipWindow.innerHeight, playerMode);
-                try {
-                    if (currentMode === 'mini') {
-                        pipWindow.resizeTo(280, 320);
-                    } else if (currentMode === 'ultra') {
-                        if (pipWindow.innerHeight < 220) {
-                            pipWindow.resizeTo(280, 110);
-                        } else {
-                            pipWindow.resizeTo(200, 220);
-                        }
-                    }
-                } catch (e) {
-                    console.warn('[StreamLyrics] Failed to resize PiP window:', e);
-                }
-            }, 200);
         };
         pipWindow.addEventListener('resize', handlePipResize);
         return () => {
             pipWindow.removeEventListener('resize', handlePipResize);
-            clearTimeout(resizeTimeout);
         };
-    }, [isPipMode, pipWindow, playerMode]);
+    }, [isPipMode, pipWindow]);
 
     useEffect(() => {
-        setPlayerMode(prev => getNextPlayerMode(activeWidth, activeHeight, prev));
+        setPlayerMode(prev => {
+            return getNextPlayerMode(activeWidth, activeHeight, prev);
+        });
     }, [activeWidth, activeHeight]);
 
     // Zero-polling metadata and artwork single-trigger tracker
@@ -143,12 +196,12 @@ export const Panel: React.FC<PanelProps> = ({ isVisible, isPipMode, pipWindow, o
     useEffect(() => {
         let rafId: number;
         const step = () => {
-            setSmoothWidth(prev => {
+            setSmoothWidth((prev: number) => {
                 const diff = activeWidth - prev;
                 if (Math.abs(diff) < 0.1) return activeWidth;
                 return prev + diff * 0.1;
             });
-            setSmoothHeight(prev => {
+            setSmoothHeight((prev: number) => {
                 const diff = activeHeight - prev;
                 if (Math.abs(diff) < 0.1) return activeHeight;
                 return prev + diff * 0.1;
@@ -158,44 +211,6 @@ export const Panel: React.FC<PanelProps> = ({ isVisible, isPipMode, pipWindow, o
         rafId = requestAnimationFrame(step);
         return () => cancelAnimationFrame(rafId);
     }, [activeWidth, activeHeight]);
-
-    // Snap panel state dimensions to perfectly justified compact sizes
-    useEffect(() => {
-        if (isPipMode) return;
-        if (isDragging || isResizing) return;
-
-        if (playerMode === 'mini') {
-            setPanelWidth(280);
-            setPanelHeight(320);
-        } else if (playerMode === 'ultra') {
-            if (activeHeight < 220) {
-                setPanelWidth(260);
-                setPanelHeight(110);
-            } else {
-                setPanelWidth(200);
-                setPanelHeight(220);
-            }
-        }
-    }, [playerMode, isDragging, isResizing, isPipMode, activeHeight < 220]);
-
-    // Auto-resize Picture-in-Picture window to match the justified aspect ratios of compact modes
-    useEffect(() => {
-        if (!isPipMode || !pipWindow) return;
-
-        try {
-            if (playerMode === 'mini') {
-                pipWindow.resizeTo(280, 320);
-            } else if (playerMode === 'ultra') {
-                if (activeHeight < 220) {
-                    pipWindow.resizeTo(280, 110);
-                } else {
-                    pipWindow.resizeTo(200, 220);
-                }
-            }
-        } catch (e) {
-            console.warn('[StreamLyrics] Failed to resize PiP window:', e);
-        }
-    }, [playerMode, isPipMode, pipWindow, activeHeight < 220]);
 
     const updateThumbnailUrl = useCallback(() => {
         const ytMusicThumb = document.querySelector('ytmusic-player-bar img.image') as HTMLImageElement;
@@ -235,11 +250,12 @@ export const Panel: React.FC<PanelProps> = ({ isVisible, isPipMode, pipWindow, o
 
     // Dynamic width restore expander
     const handleExpand = useCallback(() => {
-        setPanelWidth(400);
+        setPanelWidth(380);
         setPanelHeight(500);
+        setPlayerMode('full');
         if (isPipMode && pipWindow) {
             try {
-                pipWindow.resizeTo(400, 500);
+                pipWindow.resizeTo(380, 500);
             } catch (e) {
                 console.warn('[StreamLyrics] Failed to resize PiP window:', e);
             }
@@ -271,7 +287,7 @@ export const Panel: React.FC<PanelProps> = ({ isVisible, isPipMode, pipWindow, o
         const target = e.target as HTMLElement;
         
         // Prevent drag on resize handles and interactive buttons/inputs
-        if (target.closest('.resize-handle, .offset-btn, .source-btn, .lyric-line, .manual-search, .retry-btn, .player-btn')) return;
+        if (target.closest('.resize-handle, .offset-btn, .source-btn, .lyric-line, .manual-search, .retry-btn, .player-btn, .spotify-btn, .spotify-pill-btn, .spotify-close-dot')) return;
         
         // In full mode, don't allow dragging from player-dock
         if (playerMode === 'full' && target.closest('.player-dock')) return;
@@ -298,8 +314,8 @@ export const Panel: React.FC<PanelProps> = ({ isVisible, isPipMode, pipWindow, o
 
         const handleMouseMove = (e: MouseEvent) => {
             if (isDragging) {
-                const newX = Math.max(0, Math.min(window.innerWidth - panelWidth, e.clientX - dragOffset.x));
-                const newY = Math.max(0, Math.min(window.innerHeight - 100, e.clientY - dragOffset.y));
+                const newX = Math.max(0, Math.min(Math.max(0, window.innerWidth - panelWidth), e.clientX - dragOffset.x));
+                const newY = Math.max(0, Math.min(Math.max(0, window.innerHeight - panelHeight), e.clientY - dragOffset.y));
                 setPanelX(newX);
                 setPanelY(newY);
             }
@@ -308,25 +324,27 @@ export const Panel: React.FC<PanelProps> = ({ isVisible, isPipMode, pipWindow, o
                 const panel = panelRef.current;
                 if (!panel) return;
 
-                // Handle resizing based on direction
+                // Handle resizing based on direction with boundary clamping
                 if (isResizing.includes('e')) {
+                    const maxAllowedWidth = Math.min(MAX_WIDTH, window.innerWidth - panelX);
                     const newWidth = e.clientX - panelX;
-                    setPanelWidth(Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, newWidth)));
+                    setPanelWidth(Math.max(MIN_WIDTH, Math.min(maxAllowedWidth, newWidth)));
                 }
                 if (isResizing.includes('w')) {
                     const newWidth = panelX + panelWidth - e.clientX;
-                    if (newWidth >= MIN_WIDTH && newWidth <= MAX_WIDTH) {
+                    if (newWidth >= MIN_WIDTH && newWidth <= MAX_WIDTH && e.clientX >= 0) {
                         setPanelX(e.clientX);
                         setPanelWidth(newWidth);
                     }
                 }
                 if (isResizing.includes('s')) {
+                    const maxAllowedHeight = Math.min(MAX_HEIGHT, window.innerHeight - panelY);
                     const newHeight = e.clientY - panelY;
-                    setPanelHeight(Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, newHeight)));
+                    setPanelHeight(Math.max(MIN_HEIGHT, Math.min(maxAllowedHeight, newHeight)));
                 }
                 if (isResizing.includes('n')) {
                     const newHeight = panelY + panelHeight - e.clientY;
-                    if (newHeight >= MIN_HEIGHT && newHeight <= MAX_HEIGHT) {
+                    if (newHeight >= MIN_HEIGHT && newHeight <= MAX_HEIGHT && e.clientY >= 0) {
                         setPanelY(e.clientY);
                         setPanelHeight(newHeight);
                     }
@@ -337,6 +355,11 @@ export const Panel: React.FC<PanelProps> = ({ isVisible, isPipMode, pipWindow, o
         const handleMouseUp = () => {
             setIsDragging(false);
             setIsResizing(null);
+
+            // Sync resizing width back to chrome.storage
+            if (playerMode === 'full' && typeof chrome !== 'undefined' && chrome.storage?.sync) {
+                chrome.storage.sync.set({ panelWidth: panelWidth });
+            }
         };
 
         document.addEventListener('mousemove', handleMouseMove);
@@ -346,7 +369,7 @@ export const Panel: React.FC<PanelProps> = ({ isVisible, isPipMode, pipWindow, o
             document.removeEventListener('mousemove', handleMouseMove);
             document.removeEventListener('mouseup', handleMouseUp);
         };
-    }, [isDragging, isResizing, panelX, panelY, panelWidth, panelHeight, dragOffset]);
+    }, [isDragging, isResizing, panelX, panelY, panelWidth, panelHeight, dragOffset, playerMode]);
 
     /**
      * Check if we're in an instrumental section
@@ -469,21 +492,25 @@ export const Panel: React.FC<PanelProps> = ({ isVisible, isPipMode, pipWindow, o
     };
 
     const panelStyle = isPipMode ? {
-        backgroundColor,
+        backgroundColor: playerMode === 'full' ? backgroundColor : '#121212',
         width: '100%',
         height: '100%',
         display: 'flex',
         flexDirection: 'column' as const,
         overflow: 'hidden',
-    } : {
-        backgroundColor,
+        '--lyric-font-size': `${settings.fontSize}px`,
+    } as React.CSSProperties : {
+        backgroundColor: playerMode === 'full' ? backgroundColor : '#121212',
         width: `${smoothWidth}px`,
         height: `${smoothHeight}px`,
         left: `${panelX}px`,
         top: `${panelY}px`,
+        right: 'auto',
+        bottom: 'auto',
         position: 'fixed' as const,
-        cursor: isDragging ? 'grabbing' : (playerMode === 'full' ? 'default' : 'grab'),
-    };
+        cursor: isDragging ? 'grabbing' : 'grab',
+        '--lyric-font-size': `${settings.fontSize}px`,
+    } as React.CSSProperties;
 
     const renderPanel = (content: React.ReactElement) => {
         if (isPipMode && pipWindow) {
@@ -492,6 +519,122 @@ export const Panel: React.FC<PanelProps> = ({ isVisible, isPipMode, pipWindow, o
 
         return content;
     };
+
+    // Spotify Mini Player (Square Card) Conditional Render
+    if (playerMode === 'mini') {
+        const titleText = cleanTrack || currentTitle || 'No title';
+        const artistText = cleanArtist || 'Unknown artist';
+        
+        return renderPanel(
+            <div
+                ref={panelRef}
+                className={`streamlyrics-panel pip-style mode-mini ${isVisible ? '' : 'hidden'} ${isDragging || isResizing ? 'interacting' : ''}`}
+                style={panelStyle}
+                onMouseDown={!isPipMode ? handleDragStart : undefined}
+            >
+                {!isPipMode && <ResizeHandles onResizeStart={handleResizeStart} />}
+                {/* Spotify Mini Header */}
+                <div className="spotify-header">
+                    <button className="spotify-close-dot" onClick={handleExpand} title="Expand to Full Lyrics" aria-label="Close dot" />
+                    <div className="spotify-grip-center">
+                        <GripGrid2x4 />
+                    </div>
+                </div>
+
+                {/* Spotify Mini Artwork & Body */}
+                <div className="spotify-body">
+                    {/* Radial gradient background using dominant color */}
+                    <div className="spotify-ambient-backdrop" style={{ background: `radial-gradient(circle, ${backgroundColor} 0%, rgba(18,18,18,0.9) 100%)` }} />
+                    
+                    <div className="spotify-artwork-card">
+                        {thumbnailUrl ? (
+                            <img src={thumbnailUrl} alt="Album Art" className="spotify-album-art" draggable="false" />
+                        ) : (
+                            <AbstractThumbnail size={170} />
+                        )}
+                        
+                        {/* Hover controls overlay */}
+                        <div className="spotify-hover-overlay">
+                            <div className="spotify-controls-row">
+                                <button className="spotify-btn prev-btn" onClick={prevSong} title="Previous Song" aria-label="Previous">
+                                    <PrevIcon size={14} />
+                                </button>
+                                <button className="spotify-btn rewind-btn" onClick={() => skipVideo(-5)} title="Rewind 5s" aria-label="Rewind 5s">
+                                    <Rewind5Icon />
+                                </button>
+                                <button className="spotify-btn play-btn" onClick={togglePlayPause} title={isPaused ? 'Play' : 'Pause'} aria-label={isPaused ? 'Play' : 'Pause'}>
+                                    {isPaused ? <PlayIcon size={14} /> : <PauseIcon size={14} />}
+                                </button>
+                                <button className="spotify-btn forward-btn" onClick={() => skipVideo(5)} title="Forward 5s" aria-label="Forward 5s">
+                                    <Forward5Icon />
+                                </button>
+                                <button className="spotify-btn next-btn" onClick={nextSong} title="Next Song" aria-label="Next">
+                                    <NextIcon size={14} />
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Spotify Mini Footer */}
+                <div className="spotify-footer">
+                    <div className="spotify-track-title" title={titleText}>{titleText}</div>
+                    <div className="spotify-track-artist" title={artistText}>{artistText}</div>
+                </div>
+            </div>
+        );
+    }
+
+    // Spotify Ultra Player (Capsule Pill) Conditional Render
+    if (playerMode === 'ultra') {
+        const titleText = cleanTrack || currentTitle || 'No title';
+        const artistText = cleanArtist || 'Unknown artist';
+        
+        return renderPanel(
+            <div
+                ref={panelRef}
+                className={`streamlyrics-panel pip-style mode-ultra ${isVisible ? '' : 'hidden'} ${isDragging || isResizing ? 'interacting' : ''}`}
+                style={panelStyle}
+                onMouseDown={!isPipMode ? handleDragStart : undefined}
+            >
+                {!isPipMode && <ResizeHandles onResizeStart={handleResizeStart} />}
+                <div className="spotify-pill-content">
+                    {/* Left control section */}
+                    <div className="spotify-pill-left">
+                        <button className="spotify-close-dot" onClick={handleExpand} title="Expand to Full Lyrics" aria-label="Close dot" />
+                        <div className="spotify-pill-grip">
+                            <GripGrid2x3 />
+                        </div>
+                    </div>
+
+                    {/* Artwork thumbnail */}
+                    <div className="spotify-pill-artwork">
+                        {thumbnailUrl ? (
+                            <img src={thumbnailUrl} alt="Album Art" className="spotify-pill-img" draggable="false" />
+                        ) : (
+                            <AbstractThumbnail size={24} />
+                        )}
+                    </div>
+
+                    {/* Track info */}
+                    <div className="spotify-pill-info">
+                        <div className="spotify-pill-title" title={titleText}>{titleText}</div>
+                        <div className="spotify-pill-artist" title={artistText}>{artistText}</div>
+                    </div>
+
+                    {/* Right controls */}
+                    <div className="spotify-pill-right">
+                        <button className="spotify-pill-btn play-btn" onClick={togglePlayPause} title={isPaused ? 'Play' : 'Pause'} aria-label={isPaused ? 'Play' : 'Pause'}>
+                            {isPaused ? <PlayIcon size={10} /> : <PauseIcon size={10} />}
+                        </button>
+                        <button className="spotify-pill-btn next-btn" onClick={nextSong} title="Next Song" aria-label="Next">
+                            <NextIcon size={12} />
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     // Loading state
     if (isLoading) {
@@ -694,7 +837,7 @@ export const Panel: React.FC<PanelProps> = ({ isVisible, isPipMode, pipWindow, o
                         {thumbnailUrl ? (
                             <img src={thumbnailUrl} alt="Album Art" className="album-art" draggable="false" />
                         ) : (
-                            <AbstractThumbnail size={playerMode === 'ultra' ? 36 : 56} />
+                            <AbstractThumbnail size={56} />
                         )}
                     </div>
                     <div className="track-info">
@@ -716,7 +859,7 @@ export const Panel: React.FC<PanelProps> = ({ isVisible, isPipMode, pipWindow, o
                         <RewindIcon />
                     </button>
                     <button className="player-btn player-btn-play" onClick={togglePlayPause} title={isPaused ? 'Play' : 'Pause'} aria-label={isPaused ? 'Play' : 'Pause'}>
-                        {isPaused ? <PlayIcon size={playerMode === 'ultra' ? 18 : 22} /> : <PauseIcon size={playerMode === 'ultra' ? 18 : 22} />}
+                        {isPaused ? <PlayIcon size={22} /> : <PauseIcon size={22} />}
                     </button>
                     <button className="player-btn player-btn-forward" onClick={() => skipVideo(5)} title="Forward 5s" aria-label="Forward">
                         <FastForwardIcon />

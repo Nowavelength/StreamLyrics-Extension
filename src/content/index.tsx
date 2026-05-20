@@ -153,41 +153,41 @@ function getStyles(): string {
     /* Resize Handles - Edges */
     .resize-handle {
       position: absolute;
-      z-index: 10;
+      z-index: 10000;
     }
 
     .resize-handle.resize-n {
-      top: 0; left: 10px; right: 10px; height: 6px;
+      top: 0; left: 16px; right: 16px; height: 10px;
       cursor: ns-resize;
     }
     .resize-handle.resize-s {
-      bottom: 0; left: 10px; right: 10px; height: 6px;
+      bottom: 0; left: 16px; right: 16px; height: 10px;
       cursor: ns-resize;
     }
     .resize-handle.resize-e {
-      right: 0; top: 10px; bottom: 10px; width: 6px;
+      right: 0; top: 16px; bottom: 16px; width: 10px;
       cursor: ew-resize;
     }
     .resize-handle.resize-w {
-      left: 0; top: 10px; bottom: 10px; width: 6px;
+      left: 0; top: 16px; bottom: 16px; width: 10px;
       cursor: ew-resize;
     }
 
     /* Resize Handles - Corners */
     .resize-handle.resize-nw {
-      top: 0; left: 0; width: 12px; height: 12px;
+      top: 0; left: 0; width: 16px; height: 16px;
       cursor: nwse-resize;
     }
     .resize-handle.resize-ne {
-      top: 0; right: 0; width: 12px; height: 12px;
+      top: 0; right: 0; width: 16px; height: 16px;
       cursor: nesw-resize;
     }
     .resize-handle.resize-sw {
-      bottom: 0; left: 0; width: 12px; height: 12px;
+      bottom: 0; left: 0; width: 16px; height: 16px;
       cursor: nesw-resize;
     }
     .resize-handle.resize-se {
-      bottom: 0; right: 0; width: 12px; height: 12px;
+      bottom: 0; right: 0; width: 16px; height: 16px;
       cursor: nwse-resize;
     }
 
@@ -661,6 +661,64 @@ function getStyles(): string {
       z-index: 5;
     }
 
+    /* Full Player Metadata Cockpit Styles */
+    .metadata-cockpit {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+      padding: 0 4px;
+    }
+
+    .metadata-cockpit .thumbnail-container {
+      width: 48px;
+      height: 48px;
+      border-radius: 6px;
+      overflow: hidden;
+      flex-shrink: 0;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      border: 1px solid rgba(255,255,255,0.15);
+    }
+
+    .metadata-cockpit .thumbnail-container img,
+    .metadata-cockpit .album-art {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .metadata-cockpit .track-info {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      text-align: left;
+    }
+
+    .metadata-cockpit .track-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #ffffff !important;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.4);
+      font-family: inherit;
+    }
+
+    .metadata-cockpit .track-artist {
+      font-size: 11px;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.65) !important;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.4);
+      font-family: inherit;
+    }
+
     /* Visualizer (Waveform) */
     .visualizer {
       display: flex;
@@ -729,306 +787,344 @@ function getStyles(): string {
 
     /* Responsive Mini & Ultra Player Modes CSS rules */
 
-    /* Hide resize handles in compact player modes since they snap to fixed shapes */
-    .mode-mini .resize-handle,
-    .mode-ultra .resize-handle {
-      display: none !important;
-      pointer-events: none !important;
-    }
-
-    /* Lock in-page panel to strict, visually justified compact shapes to prevent large grey containers */
-    .pip-style.mode-mini {
-      width: 280px !important;
-      height: 320px !important;
-      min-width: 280px !important;
-      max-width: 280px !important;
-      min-height: 320px !important;
-      max-height: 320px !important;
-    }
-
-    .pip-style.mode-ultra {
-      width: 200px !important;
-      height: 220px !important;
-      min-width: 200px !important;
-      max-width: 200px !important;
-      min-height: 220px !important;
-      max-height: 220px !important;
-    }
-
-    /* Horizontal compact layout strict bounds */
-    .pip-style.layout-horizontal {
-      width: 280px !important;
-      height: 110px !important;
-      min-width: 280px !important;
-      max-width: 280px !important;
-      min-height: 110px !important;
-      max-height: 110px !important;
-    }
-
     /* Prevent native dragging and text selections from hijacking custom panel movement */
-    .metadata-cockpit,
-    .player-dock {
+    .spotify-header,
+    .spotify-body,
+    .spotify-footer,
+    .spotify-pill-content {
       user-select: none !important;
       -webkit-user-drag: none !important;
     }
-    
-    /* Collapsing lyrics, offsets, search, source header, and drag handle in compact modes */
-    .mode-mini .streamlyrics-scroll-container,
-    .mode-ultra .streamlyrics-scroll-container,
-    .mode-mini .offset-controls,
-    .mode-ultra .offset-controls,
-    .mode-mini .source-header,
-    .mode-ultra .source-header,
-    .mode-mini .drag-handle,
-    .mode-ultra .drag-handle {
-      height: 0 !important;
-      padding: 0 !important;
-      margin: 0 !important;
-      opacity: 0 !important;
-      pointer-events: none !important;
+
+    .mode-mini.streamlyrics-panel {
+      background-color: #121212 !important;
+      border: 1px solid rgba(255, 255, 255, 0.08) !important;
+      border-radius: 14px !important;
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6) !important;
       overflow: hidden !important;
-      border: none !important;
+      display: flex !important;
+      flex-direction: column !important;
+      padding: 0 !important;
     }
 
-    /* Seamless flex layouts for the compact player dashboards */
-    .mode-mini.streamlyrics-panel,
-    .mode-ultra.streamlyrics-panel {
+    .spotify-header {
+      width: 100%;
+      height: 26px;
       display: flex;
-      flex-direction: column;
-      justify-content: center;
       align-items: center;
-      transition: width 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), height 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), background-color 0.4s ease;
-    }
-
-    .mode-mini .player-dock,
-    .mode-ultra .player-dock {
+      padding: 0 10px;
+      background: #181818;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
       position: relative;
-      width: 100%;
-      height: 100%;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      background: transparent;
-      padding: 16px;
+      user-select: none;
+      flex-shrink: 0;
       box-sizing: border-box;
     }
 
-    /* Full Mode Hide metadata-cockpit and expand btn */
-    .mode-full .metadata-cockpit {
-      display: none !important;
-    }
-    .mode-full .player-btn-expand {
-      display: none !important;
+    .spotify-close-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background-color: #ff5f56;
+      border: none;
+      cursor: pointer;
+      padding: 0;
+      transition: transform 0.15s ease, opacity 0.15s ease;
+      z-index: 10;
     }
 
-    /* MINI PLAYER MODE */
-    .mode-mini .visualizer {
-      display: none !important;
+    .spotify-close-dot:hover {
+      transform: scale(1.1);
+      opacity: 0.8;
     }
-    .mode-mini .player-btn-expand {
-      display: none !important;
-    }
-    .mode-mini .metadata-cockpit {
+
+    .spotify-grip-center {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
       display: flex;
-      flex-direction: column;
       align-items: center;
-      text-align: center;
-      margin-bottom: 16px;
+      color: rgba(255, 255, 255, 0.35);
+    }
+
+    .spotify-body {
+      flex: 1;
       width: 100%;
-      animation: fadeIn 0.3s ease;
-    }
-    .mode-mini .thumbnail-container {
-      width: 64px;
-      height: 64px;
-      border-radius: 12px;
-      overflow: hidden;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.45);
-      margin-bottom: 12px;
-      background: rgba(255,255,255,0.05);
-      transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-    }
-    .mode-mini .thumbnail-container:hover {
-      transform: scale(1.04);
-    }
-    .mode-mini .album-art {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
-    .mode-mini .track-info {
+      position: relative;
       display: flex;
-      flex-direction: column;
-      gap: 4px;
-      width: 100%;
-      padding: 0 12px;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      background: #121212;
       box-sizing: border-box;
     }
-    .mode-mini .track-title {
-      font-size: 15px;
-      font-weight: 800;
-      color: #fff;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .mode-mini .track-artist {
-      font-size: 12px;
-      font-weight: 600;
-      color: rgba(255,255,255,0.6);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .mode-mini .player-controls {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      gap: 12px;
-      width: 100%;
+
+    .spotify-ambient-backdrop {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      opacity: 0.35;
+      pointer-events: none;
+      z-index: 1;
     }
 
-    /* ULTRA COMPACT PLAYER MODE */
-    .mode-ultra .visualizer {
-      display: none !important;
-    }
-    /* Hide Next, Prev, Rewind, and Forward buttons in ultra mode */
-    .mode-ultra .player-btn-prev,
-    .mode-ultra .player-btn-rewind,
-    .mode-ultra .player-btn-forward,
-    .mode-ultra .player-btn-next {
-      display: none !important;
-    }
-    .mode-ultra .metadata-cockpit {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      text-align: center;
-      margin-bottom: 12px;
-      width: 100%;
-      animation: fadeIn 0.3s ease;
-    }
-    .mode-ultra .thumbnail-container {
-      width: 56px;
-      height: 56px;
+    .spotify-artwork-card {
+      width: 65%;
+      aspect-ratio: 1 / 1;
+      max-width: 180px;
+      max-height: 180px;
       border-radius: 8px;
       overflow: hidden;
-      box-shadow: 0 6px 18px rgba(0,0,0,0.45);
-      margin-bottom: 8px;
-      background: rgba(255,255,255,0.05);
+      position: relative;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+      z-index: 2;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.08);
       transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
     }
-    .mode-ultra .thumbnail-container:hover {
-      transform: scale(1.04);
-    }
-    .mode-ultra .album-art {
+
+    .spotify-album-art {
       width: 100%;
       height: 100%;
       object-fit: cover;
+      display: block;
+      user-select: none;
+      -webkit-user-drag: none;
     }
-    .mode-ultra .track-info {
+
+    /* Spotify Hover Controls Overlay */
+    .spotify-hover-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.22s ease-in-out;
+    }
+
+    .spotify-artwork-card:hover .spotify-hover-overlay {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .spotify-artwork-card:hover {
+      transform: scale(1.02);
+    }
+
+    .spotify-controls-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    .spotify-btn {
+      appearance: none;
+      border: none;
+      background: transparent;
+      color: rgba(255, 255, 255, 0.72);
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      width: 26px;
+      height: 26px;
+      padding: 0;
+      line-height: 0;
+      box-sizing: border-box;
+      transition: transform 0.15s ease, color 0.15s ease;
+    }
+
+    .spotify-btn:hover {
+      color: #fff;
+      transform: scale(1.1);
+    }
+
+    .spotify-btn.play-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: #ffffff;
+      color: #000000;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+
+    .spotify-btn.play-btn:hover {
+      background: #f0f0f0;
+      color: #000000;
+      transform: scale(1.06);
+    }
+
+    .spotify-footer {
+      width: 100%;
+      height: 52px;
+      background: #121212;
       display: flex;
       flex-direction: column;
-      gap: 2px;
-      width: 100%;
+      justify-content: center;
       padding: 0 16px;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      flex-shrink: 0;
+      user-select: none;
       box-sizing: border-box;
     }
-    .mode-ultra .track-title {
+
+    .spotify-track-title {
       font-size: 13px;
-      font-weight: 800;
-      color: #fff;
+      font-weight: 700;
+      color: #ffffff;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      margin-bottom: 2px;
+      text-align: left;
     }
-    .mode-ultra .track-artist {
+
+    .spotify-track-artist {
       font-size: 11px;
-      font-weight: 600;
-      color: rgba(255,255,255,0.6);
+      color: #b3b3b3;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-    }
-    .mode-ultra .player-controls {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      gap: 14px;
-      width: 100%;
-    }
-    .mode-ultra .player-btn-play {
-      width: 40px;
-      height: 40px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    }
-    .mode-ultra .player-btn-expand {
-      display: grid !important;
-      place-items: center;
-      width: 32px;
-      height: 32px;
-      border-radius: 50%;
-      background: rgba(255, 255, 255, 0.1);
-      color: rgba(255, 255, 255, 0.8);
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      transition: all 0.2s ease;
-    }
-    .mode-ultra .player-btn-expand:hover {
-      background: rgba(255, 255, 255, 0.2);
-      color: #fff;
-      transform: scale(1.08);
+      text-align: left;
     }
 
-    /* Horizontal Layout for Low Heights */
-    .streamlyrics-panel.layout-horizontal .player-dock {
-      flex-direction: row !important;
-      justify-content: space-between !important;
+
+
+    .mode-ultra.streamlyrics-panel {
+      background-color: #121212 !important;
+      border: 1px solid rgba(255, 255, 255, 0.08) !important;
+      border-radius: 999px !important;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5) !important;
+      overflow: hidden !important;
+      display: flex !important;
       align-items: center !important;
-      padding: 10px 14px !important;
-      gap: 12px !important;
-      height: 100% !important;
-      box-sizing: border-box !important;
-    }
-
-    .streamlyrics-panel.layout-horizontal .metadata-cockpit {
-      flex-direction: row !important;
-      align-items: center !important;
-      text-align: left !important;
-      margin-bottom: 0 !important;
-      flex: 1 !important;
-      min-width: 0 !important;
-      gap: 10px !important;
-    }
-
-    .streamlyrics-panel.layout-horizontal .thumbnail-container {
-      width: 40px !important;
-      height: 40px !important;
-      margin-bottom: 0 !important;
-      border-radius: 6px !important;
-      flex-shrink: 0 !important;
-    }
-
-    .streamlyrics-panel.layout-horizontal .track-info {
-      text-align: left !important;
       padding: 0 !important;
-      min-width: 0 !important;
     }
 
-    .streamlyrics-panel.layout-horizontal .track-title {
-      font-size: 13px !important;
-      font-weight: 800 !important;
-      margin-bottom: 2px !important;
+    .spotify-pill-content {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      box-sizing: border-box;
+      user-select: none;
     }
 
-    .streamlyrics-panel.layout-horizontal .track-artist {
-      font-size: 11px !important;
-      font-weight: 600 !important;
+    .spotify-pill-left {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
     }
 
-    .streamlyrics-panel.layout-horizontal .player-controls {
-      margin-top: 0 !important;
-      gap: 10px !important;
-      flex-shrink: 0 !important;
+    .spotify-pill-grip {
+      display: flex;
+      align-items: center;
+      color: rgba(255, 255, 255, 0.25);
+    }
+
+    .spotify-pill-artwork {
+      width: 28px;
+      height: 28px;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-left: 8px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      flex-shrink: 0;
+    }
+
+    .spotify-pill-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .spotify-pill-info {
+      flex: 1;
+      min-width: 0;
+      margin-left: 8px;
+      margin-right: 8px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      text-align: left;
+    }
+
+    .spotify-pill-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: #ffffff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      line-height: 1.2;
+      text-align: left;
+    }
+
+    .spotify-pill-artist {
+      font-size: 9px;
+      color: #b3b3b3;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      line-height: 1.2;
+      margin-top: 1px;
+      text-align: left;
+    }
+
+    .spotify-pill-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .spotify-pill-btn {
+      appearance: none;
+      border: none;
+      background: transparent;
+      color: rgba(255, 255, 255, 0.72);
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      width: 24px;
+      height: 24px;
+      padding: 0;
+      line-height: 0;
+      transition: transform 0.15s ease, color 0.15s ease;
+    }
+
+    .spotify-pill-btn:hover {
+      color: #fff;
+      transform: scale(1.1);
+    }
+
+    .spotify-pill-btn.play-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: #ffffff;
+      color: #000000;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+    }
+
+    .spotify-pill-btn.play-btn:hover {
+      background: #f0f0f0;
+      color: #000000;
+      transform: scale(1.06);
     }
 
     @keyframes fadeIn {

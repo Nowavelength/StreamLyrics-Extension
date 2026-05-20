@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Panel } from './components/Panel';
+import { useSettings } from './hooks/useSettings';
 
 
 /**
@@ -11,6 +12,7 @@ export const App: React.FC<{ styles?: string; initialVisible?: boolean }> = ({ s
     const [isLoaded, setIsLoaded] = useState(false);
     const [isPipMode, setIsPipMode] = useState(false);
     const [pipWindow, setPipWindow] = useState<Window | null>(null);
+    const settings = useSettings();
 
     // Load saved visibility state on mount
     useEffect(() => {
@@ -128,13 +130,16 @@ export const App: React.FC<{ styles?: string; initialVisible?: boolean }> = ({ s
     // Don't render until we've loaded the saved state
     if (!isLoaded) return null;
 
+    const effectiveIsVisible = isVisible && settings.enabled;
+
     return (
         <Panel
-            isVisible={isVisible}
+            isVisible={effectiveIsVisible}
             isPipMode={isPipMode}
             pipWindow={pipWindow}
             onOpenPip={openPipWindow}
             onClosePip={closePipWindow}
+            settings={settings}
         />
     );
 };
