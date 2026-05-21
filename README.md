@@ -6,6 +6,12 @@ StreamLyrics is a premium Chrome Extension that overlays a resizable, draggable 
 
 ---
 
+## 🎬 Demo
+
+https://github.com/Nowavelength/StreamLyrics-Extension/raw/main/Video/Recording%202026-05-21%20122232.mp4
+
+---
+
 ## ✨ Features
 
 - 🎵 **Real-time synced lyrics** — Line-by-line lyrics synced to the millisecond using YouTube Music's internal timeline.
