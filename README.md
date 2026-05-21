@@ -8,7 +8,7 @@ StreamLyrics is a premium Chrome Extension that overlays a resizable, draggable 
 
 ## 🎬 Demo
 
-https://github.com/Nowavelength/StreamLyrics-Extension/raw/main/Video/Recording%202026-05-21%20122232.mp4
+[![Watch the demo](https://img.youtube.com/vi/fjx7rjMZ-7E/maxresdefault.jpg)](https://youtu.be/fjx7rjMZ-7E)
 
 ---
 
