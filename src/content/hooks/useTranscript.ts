@@ -256,7 +256,6 @@ export function useTranscript(): UseTranscriptResult {
         observer.observe(document.body, {
             childList: true,
             subtree: true,
-            characterData: true,
         });
 
         const videoListeners = ['loadedmetadata', 'durationchange', 'emptied', 'play', 'playing', 'canplay'];

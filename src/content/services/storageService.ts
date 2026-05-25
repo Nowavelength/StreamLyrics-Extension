@@ -11,7 +11,7 @@ const STORAGE_PREFIX = 'lyrics_';
 export interface SavedLyrics {
     lines: LyricLine[];
     savedAt: number;
-    source: 'local' | 'lrclib' | 'youtube';
+    source: 'local' | 'lrclib';
     originalSource?: string;
     query?: string;
     offset?: number;
@@ -48,7 +48,7 @@ export const storageService = {
     /**
      * Save a preferred choice (lightweight save, reused on next visit)
      */
-    async savePreferredLyrics(artist: string, title: string, lines: LyricLine[], source: 'local' | 'lrclib' | 'youtube', offset?: number, query?: string): Promise<void> {
+    async savePreferredLyrics(artist: string, title: string, lines: LyricLine[], source: 'local' | 'lrclib', offset?: number, query?: string): Promise<void> {
         const key = getStorageKey(artist, title);
         const data: SavedLyrics = {
             lines,

@@ -17,54 +17,6 @@ export interface LyricsSearchCandidate {
 }
 
 /**
- * Custom error classes for YouTube transcript operations
- */
-export class TranscriptsDisabledError extends Error {
-    constructor(videoId: string) {
-        super(`Transcripts are disabled for video: ${videoId}`);
-        this.name = 'TranscriptsDisabledError';
-    }
-}
-
-export class NoTranscriptFoundError extends Error {
-    constructor(videoId: string, languages?: string[]) {
-        const langMsg = languages ? ` (languages: ${languages.join(', ')})` : '';
-        super(`No transcript found for video: ${videoId}${langMsg}`);
-        this.name = 'NoTranscriptFoundError';
-    }
-}
-
-export class VideoUnavailableError extends Error {
-    constructor(videoId: string) {
-        super(`Video unavailable: ${videoId}`);
-        this.name = 'VideoUnavailableError';
-    }
-}
-
-/**
- * Parse YouTube's timedtext XML format into LyricLine array
- */
-export function parseYouTubeTranscript(xmlText: string): LyricLine[] {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(xmlText, 'text/xml');
-    const textElements = doc.querySelectorAll('text');
-
-    const lines: LyricLine[] = [];
-
-    textElements.forEach((el) => {
-        const start = parseFloat(el.getAttribute('start') || '0');
-        const duration = parseFloat(el.getAttribute('dur') || '2');
-        const text = decodeHTMLEntities(el.textContent || '');
-
-        if (text.trim()) {
-            lines.push({ start, duration, text: text.trim() });
-        }
-    });
-
-    return lines;
-}
-
-/**
  * Parse LRC format from Lrclib into LyricLine array
  * LRC format: [mm:ss.xx] text
  */
@@ -97,21 +49,6 @@ export function parseLrcFormat(lrcText: string): LyricLine[] {
     }
 
     return lines;
-}
-
-/**
- * Decode HTML entities in text
- */
-function decodeHTMLEntities(text: string): string {
-    const textarea = document.createElement('textarea');
-    textarea.innerHTML = text;
-    return textarea.value
-        .replace(/&#39;/g, "'")
-        .replace(/&quot;/g, '"')
-        .replace(/&amp;/g, '&')
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/\n/g, ' ');
 }
 
 /**
@@ -157,7 +94,7 @@ export function cleanVideoTitle(title: string): { artist: string; track: string 
 
     // Check for pipe separator (most common on YT Music)
     if (cleaned.includes(' | ')) {
-        const parts = cleaned.split(' | ');
+        const parts = cleaned.split(' | ').map((p) => p.trim()).filter(Boolean);
 
         // If first part has quotes, it's likely: "Track" Album | Artist
         if (parts[0].includes('"')) {
@@ -166,22 +103,17 @@ export function cleanVideoTitle(title: string): { artist: string; track: string 
                 track = trackMatch[1].trim();
                 artist = parts[parts.length - 1].trim(); // Last part is usually artist
             }
+        } else if (parts[parts.length - 1].includes(',')) {
+            // Multiple comma-separated artists in last part: Track | Artist1, Artist2
+            track = parts[0];
+            artist = parts[parts.length - 1];
         } else {
-            // Standard: Track | Artist or Artist | Track
-            // If last part has commas (multiple artists), it's likely: Track | Artist1, Artist2
-            if (parts[parts.length - 1].includes(',')) {
-                track = parts[0].trim();
-                artist = parts[parts.length - 1].trim();
-            } else {
-                // Guess: shorter part is likely the artist
-                if (parts[0].length < parts[1].length) {
-                    artist = parts[0].trim();
-                    track = parts[1].trim();
-                } else {
-                    track = parts[0].trim();
-                    artist = parts[1].trim();
-                }
-            }
+            // Default to YouTube/YT Music convention: Track | Artist (or Track | Album | Artist).
+            // The previous string-length heuristic flipped these almost arbitrarily,
+            // so we use the conventional ordering and let mediaSession (handled by
+            // getCurrentTrackInfo) override when available.
+            track = parts[0];
+            artist = parts[parts.length - 1];
         }
     }
     // Check for dash separator (common format)

@@ -29,6 +29,7 @@ export function useVideoSync(lines: LyricLine[], initialOffset: number = 0): Use
     }, [initialOffset]);
 
     const videoRef = useRef<HTMLVideoElement | null>(null);
+    const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null);
     const rafIdRef = useRef<number | null>(null);
     const lastLineIndexRef = useRef(-1);
 
@@ -148,8 +149,11 @@ export function useVideoSync(lines: LyricLine[], initialOffset: number = 0): Use
             for (const selector of selectors) {
                 const video = document.querySelector(selector) as HTMLVideoElement | null;
                 if (video && video.src) {
-                    videoRef.current = video;
-                    console.log('[StreamLyrics] Found video element:', selector);
+                    if (videoRef.current !== video) {
+                        videoRef.current = video;
+                        setVideoEl(video);
+                        console.log('[StreamLyrics] Found video element:', selector);
+                    }
                     return true;
                 }
             }
@@ -194,10 +198,15 @@ export function useVideoSync(lines: LyricLine[], initialOffset: number = 0): Use
 
     /**
      * Handle video events for pause/play state
+     * Re-runs whenever the discovered video element changes (e.g. after YouTube
+     * SPA navigation swaps the <video> node).
      */
     useEffect(() => {
-        const video = videoRef.current;
+        const video = videoEl;
         if (!video) return;
+
+        // Initialise pause state from the actual element so we don't drift.
+        setIsPaused(video.paused);
 
         const handlePause = () => setIsPaused(true);
         const handlePlay = () => setIsPaused(false);
@@ -219,7 +228,7 @@ export function useVideoSync(lines: LyricLine[], initialOffset: number = 0): Use
             video.removeEventListener('play', handlePlay);
             video.removeEventListener('seeked', handleSeeked);
         };
-    }, [findCurrentLineIndex]);
+    }, [videoEl, findCurrentLineIndex]);
 
     return {
         currentLineIndex,

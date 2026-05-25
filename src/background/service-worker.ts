@@ -13,10 +13,36 @@ chrome.runtime.onInstalled.addListener(() => {
 chrome.action.onClicked.addListener(async (tab) => {
     if (!tab.id) return;
 
-    // Send toggle message to content script
+    // Try to send the toggle message to an already-loaded content script.
     try {
         await chrome.tabs.sendMessage(tab.id, { type: 'TOGGLE_PANEL' });
+        return;
     } catch (error) {
-        console.log('Content script not ready, injecting...');
+        // No content script in this tab yet (e.g. tab was opened before the
+        // extension was installed/reloaded). Fall through to inject it.
+        console.log('[StreamLyrics] Content script not present, injecting...');
+    }
+
+    // Inject the content script declared in the manifest, then retry.
+    const manifest = chrome.runtime.getManifest();
+    const contentScripts = manifest.content_scripts ?? [];
+
+    for (const cs of contentScripts) {
+        if (!cs.js || cs.js.length === 0) continue;
+        try {
+            await chrome.scripting.executeScript({
+                target: { tabId: tab.id },
+                files: cs.js,
+            });
+        } catch (err) {
+            console.error('[StreamLyrics] Failed to inject content script:', err);
+            return;
+        }
+    }
+
+    try {
+        await chrome.tabs.sendMessage(tab.id, { type: 'TOGGLE_PANEL' });
+    } catch (err) {
+        console.error('[StreamLyrics] Toggle retry failed after injection:', err);
     }
 });

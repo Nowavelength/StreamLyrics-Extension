@@ -4,11 +4,6 @@ export interface LyricLine {
     text: string;
 }
 
-export interface TranscriptSource {
-    type: 'youtube' | 'lrclib';
-    lines: LyricLine[];
-}
-
 export interface VideoInfo {
     videoId: string;
     title: string;

@@ -10,13 +10,13 @@
     },
     "permissions": [
         "activeTab",
-        "storage"
+        "storage",
+        "scripting"
     ],
     "host_permissions": [
         "https://www.youtube.com/*",
         "https://music.youtube.com/*",
-        "https://lrclib.net/*",
-        "https://test-0k.onrender.com/*"
+        "https://lrclib.net/*"
     ],
     "action": {
         "default_icon": {

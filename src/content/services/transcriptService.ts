@@ -1,18 +1,14 @@
 import { LyricLine } from '../types';
 import {
     CurrentTrackInfo,
-    getVideoId,
-    getVideoTitle,
     cleanVideoTitle,
     getLyricsSearchCandidates,
-    NoTranscriptFoundError,
-    TranscriptsDisabledError,
-    VideoUnavailableError
+    getVideoTitle,
 } from '../utils/transcriptParser';
 import { lrclibService } from './lrclibService';
 import { storageService } from './storageService';
 
-export type LyricsSource = 'local' | 'youtube' | 'lrclib';
+export type LyricsSource = 'local' | 'lrclib';
 
 export interface LyricsFetchResult {
     lines: LyricLine[];
@@ -27,8 +23,6 @@ export interface LyricsFetchResult {
  * Cascading strategy: Local saved lyrics -> LRCLIB
  */
 export class TranscriptService {
-
-
     /**
      * Fetch lyrics from Lrclib only (first result)
      */
@@ -70,7 +64,7 @@ export class TranscriptService {
                 console.log('[StreamLyrics] Found saved lyrics:', savedData.lines.length, 'lines');
                 return {
                     lines: savedData.lines,
-                    source: savedData.source as LyricsSource || 'local',
+                    source: (savedData.source as LyricsSource) || 'local',
                     offset: savedData.offset,
                     isPreferred: savedData.isPreferred
                 };
@@ -81,7 +75,7 @@ export class TranscriptService {
     }
 
     /**
-     * Fetch lyrics using waterfall approach across 3 sources
+     * Fetch lyrics using waterfall approach across sources
      * Priority: Local Storage -> LRCLIB
      */
     async fetchLyrics(
@@ -95,7 +89,7 @@ export class TranscriptService {
         const localData = await this.fetchFromStorage(videoTitle, info);
         if (localData) {
             if (onPartialResult) onPartialResult(localData);
-            
+
             // If it's a hard-saved local lyric, we return immediately.
             // If it's just 'preferred', we could return immediately too.
             return localData;
@@ -103,9 +97,9 @@ export class TranscriptService {
 
         // 1. LRCLIB (global crowd-sourced)
         console.log('[StreamLyrics] Trying LRCLIB...');
-        
+
         let firstResultReported = false;
-        
+
         const lrclibLinesList = await this.fetchAllFromLrclib(videoTitle, info, (lines) => {
             if (!firstResultReported && onPartialResult) {
                 firstResultReported = true;
@@ -119,72 +113,6 @@ export class TranscriptService {
 
         console.log('[StreamLyrics] No lyrics found from any source');
         return null;
-    }
-
-    /**
-     * Fetch YouTube's built-in captions (including auto-generated)
-     * Now uses the Python backend server for reliability
-     */
-    private async fetchYouTubeTranscript(): Promise<LyricLine[] | null> {
-        try {
-            const videoId = getVideoId();
-            if (!videoId) {
-                console.log('[StreamLyrics] No video ID found');
-                return null;
-            }
-
-            console.log('[StreamLyrics] Using video ID:', videoId);
-            console.log('[StreamLyrics] Fetching from backend server...');
-
-            try {
-                // Use the backend server logic (Option B)
-                const response = await fetch(`http://localhost:8000/transcript?video_id=${videoId}`);
-
-                if (!response.ok) {
-                    const error = await response.json().catch(() => ({ detail: response.statusText }));
-                    console.error('[StreamLyrics] Backend error:', error);
-
-                    if (response.status === 404) {
-                        throw new NoTranscriptFoundError(videoId);
-                    }
-
-                    throw new Error(`Backend error: ${error.detail || response.statusText}`);
-                }
-
-                const data = await response.json();
-
-                if (data.transcript && Array.isArray(data.transcript)) {
-                    console.log(`[StreamLyrics] Got ${data.transcript.length} lines from backend (${data.language})`);
-
-                    return data.transcript.map((item: any) => ({
-                        text: item.text,
-                        startTime: item.start,
-                        endTime: item.start + item.duration
-                    }));
-                }
-
-                throw new Error('Invalid response format from backend');
-
-            } catch (error) {
-                console.error('[StreamLyrics] Backend fetch failed:', error);
-
-                if (error instanceof NoTranscriptFoundError || error instanceof TranscriptsDisabledError || error instanceof VideoUnavailableError) {
-                    throw error;
-                }
-                throw error;
-            }
-        } catch (error) {
-            if (error instanceof TranscriptsDisabledError) {
-                console.error('[StreamLyrics]', error.message);
-            } else if (error instanceof NoTranscriptFoundError) {
-                console.error('[StreamLyrics]', error.message);
-            } else if (error instanceof VideoUnavailableError) {
-                console.error('[StreamLyrics]', error.message);
-            } else {
-                console.error('[StreamLyrics] Error fetching YouTube transcript:', error);
-            }
-            return null;
-        }
     }
 }
 

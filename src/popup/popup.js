@@ -5,6 +5,12 @@ const DEFAULT_SETTINGS = {
     fontSize: 32,
 };
 
+// Tabs we want to push settings updates to.
+const TARGET_TAB_PATTERNS = [
+    'https://www.youtube.com/*',
+    'https://music.youtube.com/*',
+];
+
 // DOM Elements
 const enabledToggle = document.getElementById('enabled');
 const panelWidthSlider = document.getElementById('panelWidth');
@@ -24,15 +30,31 @@ async function loadSettings() {
     fontSizeValue.textContent = `${result.fontSize}px`;
 }
 
+/**
+ * Push the given settings payload to every active YouTube/YouTube Music tab.
+ * Tabs that don't have the content script loaded yet will throw, which we
+ * silently ignore — those tabs will pick up the new value via
+ * chrome.storage.onChanged on next load.
+ */
+async function broadcastSettings(settings) {
+    const tabs = await chrome.tabs.query({ url: TARGET_TAB_PATTERNS });
+    await Promise.all(
+        tabs.map((tab) =>
+            tab.id
+                ? chrome.tabs
+                      .sendMessage(tab.id, { type: 'SETTINGS_UPDATED', settings })
+                      .catch(() => {
+                          /* No content script in this tab yet — ignore. */
+                      })
+                : Promise.resolve()
+        )
+    );
+}
+
 // Save settings to storage
 async function saveSettings(settings) {
     await chrome.storage.sync.set(settings);
-
-    // Notify content script of changes
-    const tabs = await chrome.tabs.query({ url: 'https://www.youtube.com/*' });
-    for (const tab of tabs) {
-        chrome.tabs.sendMessage(tab.id, { type: 'SETTINGS_UPDATED', settings });
-    }
+    await broadcastSettings(settings);
 }
 
 // Event listeners
@@ -55,12 +77,7 @@ fontSizeSlider.addEventListener('input', (e) => {
 resetBtn.addEventListener('click', async () => {
     await chrome.storage.sync.set(DEFAULT_SETTINGS);
     loadSettings();
-
-    // Notify content script
-    const tabs = await chrome.tabs.query({ url: 'https://www.youtube.com/*' });
-    for (const tab of tabs) {
-        chrome.tabs.sendMessage(tab.id, { type: 'SETTINGS_UPDATED', settings: DEFAULT_SETTINGS });
-    }
+    await broadcastSettings(DEFAULT_SETTINGS);
 });
 
 // Initialize

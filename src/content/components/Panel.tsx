@@ -131,7 +131,12 @@ export const Panel: React.FC<PanelProps> = ({ isVisible, isPipMode, pipWindow, o
     // Panel dimensions and position
     const [panelWidth, setPanelWidth] = useState(settings?.panelWidth ?? 380);
     const [panelHeight, setPanelHeight] = useState(500);
-    const [panelX, setPanelX] = useState(window.innerWidth - 400);
+    const [panelX, setPanelX] = useState(() => {
+        const desired = window.innerWidth - 400;
+        // Clamp to safe range so the panel never spawns off-screen even when
+        // the window is narrower than 400px (or innerWidth is 0 in odd contexts).
+        return Math.max(0, Math.min(desired, Math.max(0, window.innerWidth - 200)));
+    });
     const [panelY, setPanelY] = useState(80);
 
     // Interaction states
@@ -475,7 +480,7 @@ export const Panel: React.FC<PanelProps> = ({ isVisible, isPipMode, pipWindow, o
 
     /**
      * Handle delete local lyrics
-     * Removes cached lyrics and switches to API source
+     * Removes cached lyrics and refetches from API sources
      */
     const handleDeleteLocal = async () => {
         const videoTitle = getLyricsSearchTitle(getCurrentTrackInfo());
@@ -487,8 +492,9 @@ export const Panel: React.FC<PanelProps> = ({ isVisible, isPipMode, pipWindow, o
 
         await storageService.deleteLyrics(artist, track);
 
-        // Force refresh to fetch from API sources
-        window.location.reload();
+        // Refetch lyrics from remaining sources without reloading the YT page
+        // (which would lose the user's playback position).
+        refetch();
     };
 
     const panelStyle = isPipMode ? {
@@ -744,7 +750,6 @@ export const Panel: React.FC<PanelProps> = ({ isVisible, isPipMode, pipWindow, o
                 <div className="source-buttons">
                     <span className="source-name" style={{ display: 'flex', alignItems: 'center', height: '26px', boxSizing: 'border-box' }}>
                         {source === 'local' && 'Local (Saved)'}
-                        {source === 'youtube' && 'YouTube'}
                         {source === 'lrclib' && 'LRCLIB'}
                     </span>
                     {hasMoreResults && (
