@@ -9,9 +9,14 @@ interface UseVideoSyncResult {
     offset: number;
     seekTo: (time: number) => void;
     adjustOffset: (delta: number) => void;
+    setOffsetExact: (value: number) => void;
     resetOffset: () => void;
     togglePlayPause: () => void;
 }
+
+/** Round to centisecond precision (10ms). Sufficient for sync, imperceptible. */
+const OFFSET_GRANULARITY = 0.01;
+const roundOffset = (n: number) => Math.round(n / OFFSET_GRANULARITY) * OFFSET_GRANULARITY;
 
 /**
  * Hook for syncing lyrics with video playback
@@ -105,9 +110,19 @@ export function useVideoSync(lines: LyricLine[], initialOffset: number = 0): Use
      */
     const adjustOffset = useCallback((delta: number) => {
         setOffset(prev => {
-            const newOffset = Math.round((prev + delta) * 10) / 10; // Round to 0.1s
-            return Math.max(-120, Math.min(120, newOffset)); // Clamp to ±120s
+            const newOffset = roundOffset(prev + delta);
+            return Math.max(-120, Math.min(120, newOffset));
         });
+    }, []);
+
+    /**
+     * Set offset to an exact value. Used by the anchor-to-line gesture
+     * (shift-click on a lyric line) where we need precision rather than
+     * incremental adjustment.
+     */
+    const setOffsetExact = useCallback((value: number) => {
+        const clamped = Math.max(-120, Math.min(120, roundOffset(value)));
+        setOffset(clamped);
     }, []);
 
     /**
@@ -237,6 +252,7 @@ export function useVideoSync(lines: LyricLine[], initialOffset: number = 0): Use
         offset,
         seekTo,
         adjustOffset,
+        setOffsetExact,
         resetOffset,
         togglePlayPause,
     };

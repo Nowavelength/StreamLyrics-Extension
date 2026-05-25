@@ -187,12 +187,30 @@ export const Panel: React.FC<PanelProps> = ({ isVisible, isPipMode, pipWindow, o
     const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
 
     const { lines, isLoading, error, source, currentTitle, refetch, searchManual, switchSource, tryNextResult, hasMoreResults } = useTranscript();
-    const { currentLineIndex, isPaused, currentTime, offset, seekTo, adjustOffset, resetOffset, togglePlayPause } = useVideoSync(lines);
+    const { currentLineIndex, isPaused, currentTime, offset, seekTo, adjustOffset, setOffsetExact, resetOffset, togglePlayPause } = useVideoSync(lines);
     const backgroundColor = useDominantColor(thumbnailUrl);
     const bars = useAudioBars(32);
     const [manualArtist, setManualArtist] = useState('');
     const [manualTrack, setManualTrack] = useState('');
     const [isSearchVisible, setIsSearchVisible] = useState(false);
+
+    // Tracks whether the user is actively tuning offset (scroll/drag/click on
+    // buttons, or a recent shift-click anchor). Drives the visibility of the
+    // direction hint, the audio-position marker glow, and any other
+    // adjustment-only UI. Cleared 1.5s after the last interaction.
+    const [isAdjusting, setIsAdjusting] = useState(false);
+    const adjustingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const flagAdjusting = useCallback(() => {
+        setIsAdjusting(true);
+        if (adjustingTimerRef.current) clearTimeout(adjustingTimerRef.current);
+        adjustingTimerRef.current = setTimeout(() => setIsAdjusting(false), 1500);
+    }, []);
+    useEffect(() => () => {
+        if (adjustingTimerRef.current) clearTimeout(adjustingTimerRef.current);
+    }, []);
+
+    const offsetValueRef = useRef<HTMLButtonElement>(null);
+    const audioMarkerRef = useRef<HTMLDivElement>(null);
 
     // 90/10 Spring-like mathematical dimension smoothing
     const [smoothWidth, setSmoothWidth] = useState(activeWidth);
@@ -409,14 +427,143 @@ export const Panel: React.FC<PanelProps> = ({ isVisible, isPipMode, pipWindow, o
     }, [currentLineIndex]);
 
     /**
-     * Handle clicking on a lyric line to seek
+     * Karaoke fill: write the active line's playback progress (0–1) into a
+     * CSS custom property on the line wrapper. The .lyric-active style uses
+     * `background-clip: text` with a gradient driven by --progress to produce
+     * an Apple Music-style left-to-right fill. Imperative DOM update so React
+     * doesn't re-render every frame.
      */
-    const handleLineClick = (index: number) => {
-        if (lines[index]) {
-            const seekTime = Math.max(0, lines[index].start - offset);
-            seekTo(seekTime);
+    useEffect(() => {
+        if (currentLineIndex < 0) return;
+        const line = lines[currentLineIndex];
+        if (!line || line.duration <= 0) return;
+        const wrapper = lineRefs.current[currentLineIndex];
+        if (!wrapper) return;
+        const elapsed = currentTime + offset - line.start;
+        const progress = Math.max(0, Math.min(1, elapsed / line.duration));
+        wrapper.style.setProperty('--progress', String(progress));
+    }, [currentTime, offset, currentLineIndex, lines]);
+
+    /**
+     * Position the audio-position marker (C13) — the "you are here" indicator
+     * that points to where raw audio time falls in the lyric flow, ignoring
+     * offset. When offset is zero, this lines up with the highlight; when
+     * offset is non-zero, the gap visualises the misalignment.
+     */
+    useEffect(() => {
+        const marker = audioMarkerRef.current;
+        if (!marker || lines.length === 0) return;
+
+        // Binary search on raw currentTime (no offset)
+        let left = 0, right = lines.length - 1, rawIdx = -1;
+        while (left <= right) {
+            const mid = Math.floor((left + right) / 2);
+            if (lines[mid].start <= currentTime) { rawIdx = mid; left = mid + 1; }
+            else { right = mid - 1; }
         }
+        if (rawIdx < 0) {
+            marker.style.opacity = '0';
+            return;
+        }
+        const lineEl = lineRefs.current[rawIdx];
+        if (!lineEl) return;
+        // Position at the vertical centre of the raw-audio line
+        const top = lineEl.offsetTop + lineEl.offsetHeight / 2;
+        marker.style.top = `${top}px`;
+        marker.style.opacity = '';
+    }, [currentTime, lines]);
+
+    // Compute next-line preview state every render (cheap; Panel already
+    // re-renders on currentTime updates via useVideoSync)
+    const nextLineIdx = currentLineIndex + 1;
+    const nextLine = nextLineIdx >= 0 && nextLineIdx < lines.length ? lines[nextLineIdx] : null;
+    const timeToNext = nextLine ? nextLine.start - (currentTime + offset) : 0;
+    const showNextLine = nextLine !== null && timeToNext > 0 && timeToNext < 8;
+
+    /**
+     * Handle clicking on a lyric line.
+     * Shift+click "anchors" the lyrics to the current playback time — i.e.
+     * it sets the offset so this line becomes the active one right now,
+     * which is the fastest way to fix a systematically-off LRC.
+     * Plain click seeks the video to that line.
+     */
+    const handleLineClick = (index: number, e?: React.MouseEvent) => {
+        if (!lines[index]) return;
+        if (e?.shiftKey) {
+            // adjustedTime = currentTime + offset; we want adjustedTime = lines[index].start
+            const target = lines[index].start - currentTime;
+            setOffsetExact(target);
+            flagAdjusting();
+            return;
+        }
+        const seekTime = Math.max(0, lines[index].start - offset);
+        seekTo(seekTime);
     };
+
+    /**
+     * Mouse-down on the offset value pill. Distinguishes click vs drag —
+     * a movement of >3px counts as a drag and continuously updates the
+     * offset (~0.01s per pixel; Shift = 0.001s/pixel for frame-precise tuning).
+     * A pure click without movement resets the offset to zero.
+     */
+    const handleOffsetMouseDown = useCallback((e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const startX = e.clientX;
+        const startOffset = offset;
+        let dragged = false;
+        let lastTarget = startOffset;
+
+        const onMove = (m: MouseEvent) => {
+            const dx = m.clientX - startX;
+            if (!dragged && Math.abs(dx) > 3) dragged = true;
+            if (!dragged) return;
+            const factor = m.shiftKey ? 0.001 : 0.01;
+            const target = startOffset + dx * factor;
+            const delta = target - lastTarget;
+            if (Math.abs(delta) >= 0.01) {
+                adjustOffset(delta);
+                lastTarget = target;
+                flagAdjusting();
+            }
+        };
+        const onUp = () => {
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+            if (!dragged) {
+                resetOffset();
+                flagAdjusting();
+            }
+        };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    }, [offset, adjustOffset, resetOffset, flagAdjusting]);
+
+    /**
+     * Wheel-on-offset-value: ±0.05s per notch by default,
+     * Shift = ±0.5s (coarse), Ctrl/Cmd = ±0.01s (ultra-fine).
+     * Attached imperatively because React's synthetic wheel listener is
+     * passive in modern React, so e.preventDefault() inside an onWheel
+     * handler is ignored.
+     */
+    useEffect(() => {
+        const el = offsetValueRef.current;
+        if (!el) return;
+        const handler = (e: WheelEvent) => {
+            e.preventDefault();
+            const step = e.shiftKey ? 0.5 : (e.ctrlKey || e.metaKey) ? 0.01 : 0.05;
+            adjustOffset(e.deltaY < 0 ? step : -step);
+            flagAdjusting();
+        };
+        el.addEventListener('wheel', handler, { passive: false });
+        return () => el.removeEventListener('wheel', handler);
+    }, [adjustOffset, flagAdjusting]);
+
+    /** Wrap adjustOffset for the +/- buttons so they also flag adjustment */
+    const stepOffset = useCallback((delta: number) => {
+        adjustOffset(delta);
+        flagAdjusting();
+    }, [adjustOffset, flagAdjusting]);
 
     const handleManualSearch = (e: React.FormEvent) => {
         e.preventDefault();
@@ -792,19 +939,46 @@ export const Panel: React.FC<PanelProps> = ({ isVisible, isPipMode, pipWindow, o
             )}
 
             {/* Offset Controls */}
-            <div className="offset-controls">
-                <button className="offset-btn" onClick={() => adjustOffset(-5)} title="-5s">-5</button>
-                <button className="offset-btn" onClick={() => adjustOffset(-1)} title="-1s">-1</button>
-                <button className="offset-btn" onClick={() => adjustOffset(-0.2)} title="-0.2s">-.2</button>
-                <button className="offset-value" onClick={resetOffset} title="Reset">
-                    {offset >= 0 ? '+' : ''}{offset.toFixed(1)}s
+            <div className={`offset-controls ${isAdjusting ? 'adjusting' : ''}`}>
+                <button className="offset-btn" onClick={() => stepOffset(-5)} title="Lyrics 5s later (delay)">-5</button>
+                <button className="offset-btn" onClick={() => stepOffset(-1)} title="Lyrics 1s later (delay)">-1</button>
+                <button className="offset-btn" onClick={() => stepOffset(-0.2)} title="Lyrics 0.2s later (delay)">-.2</button>
+                <button
+                    ref={offsetValueRef}
+                    className="offset-value"
+                    onMouseDown={handleOffsetMouseDown}
+                    title="Drag to scrub  •  Scroll to fine-tune (Shift = coarse, Ctrl = ultra-fine)  •  Click to reset"
+                >
+                    {offset >= 0 ? '+' : ''}{offset.toFixed(2)}s
                 </button>
-                <button className="offset-btn" onClick={() => adjustOffset(0.2)} title="+0.2s">+.2</button>
-                <button className="offset-btn" onClick={() => adjustOffset(1)} title="+1s">+1</button>
-                <button className="offset-btn" onClick={() => adjustOffset(5)} title="+5s">+5</button>
+                <button className="offset-btn" onClick={() => stepOffset(0.2)} title="Lyrics 0.2s earlier">+.2</button>
+                <button className="offset-btn" onClick={() => stepOffset(1)} title="Lyrics 1s earlier">+1</button>
+                <button className="offset-btn" onClick={() => stepOffset(5)} title="Lyrics 5s earlier">+5</button>
+                <div className="offset-hint" aria-live="polite">
+                    {offset === 0
+                        ? 'in sync'
+                        : offset > 0
+                            ? `lyrics ${offset.toFixed(2)}s earlier than source`
+                            : `lyrics ${Math.abs(offset).toFixed(2)}s later than source`}
+                </div>
             </div>
 
-            <div ref={scrollRef} className="streamlyrics-scroll-container">
+            {/* Next-line preview — small banner overlaying the top of the lyrics
+                area showing what plays next and when. Always visible during
+                playback whenever the next line is < 8s away. */}
+            {showNextLine && nextLine && (
+                <div className="next-line-preview" aria-hidden="true">
+                    <span className="next-line-countdown">in {timeToNext.toFixed(1)}s</span>
+                    <span className="next-line-text">{nextLine.text}</span>
+                </div>
+            )}
+
+            <div ref={scrollRef} className={`streamlyrics-scroll-container ${isAdjusting ? 'adjusting' : ''}`}>
+                {/* "You are here" marker — anchored to raw audio time within the
+                    lyric flow, independent of offset. Pairs with the karaoke
+                    fill on the active line to make any misalignment obvious. */}
+                <div ref={audioMarkerRef} className="audio-position-marker" aria-hidden="true" />
+
                 {lines.map((line, index) => (
                     <div
                         key={`${line.start}-${index}`}
@@ -814,7 +988,7 @@ export const Panel: React.FC<PanelProps> = ({ isVisible, isPipMode, pipWindow, o
                             text={line.text}
                             isActive={index === currentLineIndex}
                             isPast={index < currentLineIndex}
-                            onClick={() => handleLineClick(index)}
+                            onClick={(e) => handleLineClick(index, e)}
                         />
                     </div>
                 ))}

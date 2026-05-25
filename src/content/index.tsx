@@ -304,9 +304,13 @@ function getStyles(): string {
       padding: 6px 12px;
       z-index: 5;
     }
-
     .in-pip-window .offset-controls {
       top: 40px;
+    }
+
+    /* Next-line preview rides 30px below the offset row on both layouts */
+    .in-pip-window .next-line-preview {
+      top: 70px;
     }
 
     /* Scroll Container Adjustments for PIP */
@@ -347,14 +351,126 @@ function getStyles(): string {
       border: 1px solid rgba(255,255,255,0.25);
       border-radius: 4px;
       padding: 4px 12px;
-      cursor: pointer;
-      min-width: 60px;
+      cursor: ew-resize;
+      min-width: 78px;
       text-align: center;
       font-family: inherit;
+      user-select: none;
+      transition: background 0.15s, border-color 0.15s;
+      font-variant-numeric: tabular-nums;
     }
 
     .offset-value:hover {
       background: rgba(255,255,255,0.25);
+      border-color: rgba(255,255,255,0.4);
+    }
+
+    .offset-controls.adjusting .offset-value {
+      background: rgba(255,255,255,0.32);
+      border-color: rgba(255,255,255,0.55);
+      box-shadow: 0 0 12px rgba(255,255,255,0.18);
+    }
+
+    /* Direction hint — fades in below the offset row only while user is
+       actively tuning. Tells you what +/- means in plain English so the
+       sign convention is unambiguous at the moment it matters. */
+    .offset-hint {
+      position: absolute;
+      bottom: -16px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 10px;
+      font-weight: 600;
+      color: rgba(255,255,255,0.75);
+      white-space: nowrap;
+      letter-spacing: 0.3px;
+      opacity: 0;
+      transition: opacity 0.18s ease-out;
+      pointer-events: none;
+      text-shadow: 0 1px 4px rgba(0,0,0,0.5);
+    }
+
+    .offset-controls.adjusting .offset-hint {
+      opacity: 1;
+    }
+
+    /* Next-line preview — overlays the top of the lyric scroll area with a
+       small countdown to the upcoming line. Soft gradient backdrop so it
+       reads against any dominant-colour background. */
+    .next-line-preview {
+      position: absolute;
+      top: 90px;
+      left: 24px;
+      right: 24px;
+      z-index: 6;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px 16px;
+      background: linear-gradient(to bottom, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.18) 60%, transparent 100%);
+      color: rgba(255,255,255,0.78);
+      font-size: 11px;
+      font-weight: 600;
+      pointer-events: none;
+      animation: next-line-fade 0.25s ease-out;
+    }
+
+    .next-line-countdown {
+      color: #ffffff;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      flex-shrink: 0;
+      letter-spacing: 0.3px;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+    }
+
+    .next-line-text {
+      font-style: italic;
+      opacity: 0.85;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex: 1;
+      min-width: 0;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+    }
+
+    @keyframes next-line-fade {
+      from { opacity: 0; transform: translateY(-2px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* "You are here" marker — vertical accent positioned at the raw audio
+       time within the lyric flow. Stays muted normally; glows when the user
+       is actively tuning so the gap between this and the highlighted line
+       (which uses offset-adjusted time) is unmistakable. */
+    .streamlyrics-scroll-container {
+      position: relative;
+    }
+
+    .audio-position-marker {
+      position: absolute;
+      left: 4px;
+      width: 3px;
+      height: 22px;
+      transform: translateY(-50%);
+      background: linear-gradient(
+        to bottom,
+        transparent 0%,
+        rgba(255, 255, 255, 0.95) 50%,
+        transparent 100%
+      );
+      border-radius: 3px;
+      pointer-events: none;
+      opacity: 0.35;
+      transition: top 0.12s linear, opacity 0.25s ease-out;
+      box-shadow: 0 0 6px rgba(255, 255, 255, 0.4);
+      z-index: 1;
+    }
+
+    .streamlyrics-scroll-container.adjusting .audio-position-marker {
+      opacity: 1;
+      box-shadow: 0 0 12px rgba(255, 255, 255, 0.7);
     }
 
     /* Lyric Line Base Styles */
@@ -385,6 +501,24 @@ function getStyles(): string {
 
     .lyric-active {
       transform: scale(1.05);
+      /* Karaoke-style left-to-right fill driven by --progress (0-1) on the
+         wrapper div. The unfilled portion stays at 55% opacity so the line
+         is still readable; filled portion is solid white. */
+      background: linear-gradient(
+        90deg,
+        #ffffff calc(var(--progress, 0) * 100%),
+        rgba(255, 255, 255, 0.55) calc(var(--progress, 0) * 100%)
+      );
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      transition: background 0.08s linear, transform 0.2s ease-out;
+    }
+
+    /* Disable the gradient transition while user is actively tuning offset
+       so the karaoke fill snaps to the new position instantly */
+    .streamlyrics-scroll-container.adjusting .lyric-active {
+      transition: transform 0.2s ease-out;
     }
 
     /* Future Lines - Black with reduced opacity */
