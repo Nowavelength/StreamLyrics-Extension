@@ -2,7 +2,7 @@
 
 **Real-time synced lyrics — floating right on top of YouTube Music.**
 
-StreamLyrics is a premium Chrome Extension that overlays a resizable, draggable lyrics panel directly on YouTube Music. It feels like a native part of the player — not a clunky popup.
+StreamLyrics is a Chrome Extension that overlays a resizable, draggable lyrics panel directly on YouTube Music. It feels like a native part of the player — not a clunky popup.
 
 ---
 
@@ -15,18 +15,19 @@ StreamLyrics is a premium Chrome Extension that overlays a resizable, draggable 
 ## ✨ Features
 
 - 🎵 **Real-time synced lyrics** — Line-by-line lyrics synced to the millisecond using YouTube Music's internal timeline.
-- 🎨 **Dominant color theming** — Extracts the dominant accent color from the album artwork and paints a dynamic glowing gradient behind the lyrics.
+- 🎨 **Dominant color theming** — Extracts the dominant accent color from the album artwork (via ColorThief median-cut) and paints a dynamic glowing gradient behind the lyrics.
 - 📐 **Three adaptive layout modes** — The panel morphs between three states based on how much space you give it:
   - **Full Mode** — Complete scrolling lyrics with visualizer, progress bar, and controls.
   - **Mini Card** — A compact square with the current lyric line, cover art, and quick controls. Activates when panel area ≤ 135,000 px².
   - **Ultra Capsule Pill** — A tiny floating horizontal strip with just the active lyric and play/pause. Activates when height ≤ 80px.
 - 🔊 **Real-time audio visualizer** — A live 32-band FFT spectrum visualizer that reacts to the actual audio playing. Falls back to a procedural wave animation when audio access is unavailable.
 - 🖱️ **Fully draggable & resizable** — Drag from anywhere on the panel, resize from any edge or corner with 8 precision handles.
-- 💾 **Persisted layout memory** — Size, position, and mode are saved and restored exactly as you left them across sessions.
-- ⏯️ **Full playback controls** — Play, pause, previous, next, 5-second skip forward/back, and a seek scrubber — all inside the panel.
+- 💾 **Persisted layout memory** — Width, height, position, and mode are saved and restored exactly as you left them across sessions.
+- ⏯️ **Full playback controls** — Play, pause, previous, next, 5-second skip forward/back — all inside the panel.
 - 🎤 **Click any lyric to seek** — Tap any lyric line to jump the song to that exact timestamp.
-- 🎼 **Instrumental detection** — Shows a music note icon during instrumental sections instead of leaving the panel blank.
-- 🔁 **Hybrid lyrics source** — Pulls lyrics from YouTube Music's own captions first, then falls back to the [LRCLIB](https://lrclib.net) timestamped lyrics API for maximum coverage.
+- 🎼 **Instrumental detection** — Shows a music note icon during instrumental sections (intros and gaps) instead of leaving the panel blank.
+- 🔁 **Hybrid lyrics source** — Pulls saved local lyrics first, then falls back to the [LRCLIB](https://lrclib.net) timestamped lyrics API for maximum coverage.
+- 🛡️ **Error boundary** — A crash inside the panel falls back to a small retry message instead of leaving a blank shadow DOM.
 
 ---
 
@@ -59,7 +60,7 @@ This compiles everything into the `dist/` folder.
 - Click **Load unpacked**
 - Select the `dist/` folder inside this repo
 
-**5. You're done.** Open [YouTube Music](https://music.youtube.com), play any song, and the StreamLyrics panel appears automatically.
+**5. You're done.** Open [YouTube Music](https://music.youtube.com), play any song, and click the StreamLyrics toolbar icon to show the panel.
 
 ---
 
@@ -75,13 +76,15 @@ Vite watches for file changes and rebuilds automatically. After each rebuild, go
 
 ## 🎮 Usage
 
-1. **Open YouTube Music** and play any song — the panel appears automatically.
-2. **Drag** the panel anywhere on screen by clicking and dragging from the background.
-3. **Resize** by dragging any of the 8 edge or corner handles.
-4. **Shrink it down** — drag the panel smaller to switch to Mini Card or Ultra Capsule Pill mode.
-5. **Expand it back** — drag it larger or click the expand button in pill/mini mode to restore full mode.
-6. **Click any lyric line** to seek the song to that exact moment.
-7. **Use the playback controls** — play, pause, skip, and scrub without leaving the panel.
+1. **Open YouTube or YouTube Music** and play any song.
+2. **Click the StreamLyrics toolbar icon** to toggle the panel on. (If the tab was opened before installing the extension, the icon click will inject the script automatically — no manual reload needed.)
+3. **Drag** the panel anywhere on screen by clicking and dragging from the background.
+4. **Resize** by dragging any of the 8 edge or corner handles.
+5. **Shrink it down** — drag the panel smaller to switch to Mini Card or Ultra Capsule Pill mode.
+6. **Expand it back** — drag it larger or click the expand button to restore your previous full-mode size (it remembers).
+7. **Click any lyric line** to seek the song to that exact moment.
+8. **Use the playback controls** — play, pause, skip, all without leaving the panel.
+9. **Open settings** — right-click the StreamLyrics toolbar icon and choose **Options**, or open `chrome://extensions/` and click "Extension options" on the StreamLyrics card.
 
 ---
 
@@ -91,9 +94,10 @@ Vite watches for file changes and rebuilds automatically. After each rebuild, go
 |---|---|
 | UI Framework | React 18 + TypeScript |
 | Bundler | Vite + CRXJS |
-| Styling | Vanilla CSS (Shadow DOM isolated) |
-| Lyrics API | LRCLIB + YouTube captions |
+| Styling | Vanilla CSS (Shadow DOM isolated, system fonts) |
+| Lyrics API | LRCLIB |
 | Audio | Web Audio API (AnalyserNode FFT) |
+| Color | ColorThief (median-cut quantization) |
 
 ---
 
@@ -101,9 +105,14 @@ Vite watches for file changes and rebuilds automatically. After each rebuild, go
 
 | Permission | Why it's needed |
 |---|---|
-| `tabs` | Read the active YouTube Music tab URL |
-| `storage` | Save your panel size, position, and settings |
-| `host_permissions (music.youtube.com)` | Inject the lyrics panel into YouTube Music pages |
+| `activeTab` | Send toggle messages to the currently focused YouTube/YouTube Music tab |
+| `storage` | Save your panel size, position, settings, and any lyrics you download |
+| `scripting` | Inject the content script on demand if it isn't already loaded (e.g. for tabs opened before install) |
+| `host_permissions: youtube.com` | Inject the lyrics panel into YouTube |
+| `host_permissions: music.youtube.com` | Inject the lyrics panel into YouTube Music |
+| `host_permissions: lrclib.net` | Fetch synced lyrics from the LRCLIB API |
+
+No analytics. No tracking. No third-party servers besides LRCLIB and YouTube's own image CDN for thumbnails.
 
 ---
 

@@ -1,4 +1,28 @@
+# Dependencies
 node_modules/
+
+# Build output
 dist/
+*.tsbuildinfo
+
+# Environment
 .env
+.env.local
+
+# Editor / IDE / agent tooling
+.vscode/
+.idea/
+.antigravitycli/
+*.swp
+
+# OS
 .DS_Store
+Thumbs.db
+desktop.ini
+
+# Packaging
+*.zip
+*.crx
+
+# Misc
+*.log

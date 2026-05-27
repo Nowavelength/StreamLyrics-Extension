@@ -1,67 +1,97 @@
-// Default settings
+// Default settings - kept in sync with src/background/service-worker.ts
 const DEFAULT_SETTINGS = {
     enabled: true,
     panelWidth: 400,
     fontSize: 32,
 };
 
-// DOM Elements
-const enabledToggle = document.getElementById('enabled');
-const panelWidthSlider = document.getElementById('panelWidth');
-const widthValue = document.getElementById('widthValue');
-const fontSizeSlider = document.getElementById('fontSize');
-const fontSizeValue = document.getElementById('fontSizeValue');
-const resetBtn = document.getElementById('resetBtn');
+const TARGET_URLS = [
+    'https://www.youtube.com/*',
+    'https://music.youtube.com/*',
+];
 
-// Load settings from storage
+const $ = (id) => document.getElementById(id);
+
+const enabledToggle = $('enabled');
+const panelWidthSlider = $('panelWidth');
+const widthValue = $('widthValue');
+const fontSizeSlider = $('fontSize');
+const fontSizeValue = $('fontSizeValue');
+const resetBtn = $('resetBtn');
+
+if (!enabledToggle || !panelWidthSlider || !widthValue || !fontSizeSlider || !fontSizeValue || !resetBtn) {
+    console.error('[StreamLyrics] popup.html is missing expected elements');
+}
+
 async function loadSettings() {
-    const result = await chrome.storage.sync.get(DEFAULT_SETTINGS);
-
-    enabledToggle.checked = result.enabled;
-    panelWidthSlider.value = result.panelWidth;
-    widthValue.textContent = `${result.panelWidth}px`;
-    fontSizeSlider.value = result.fontSize;
-    fontSizeValue.textContent = `${result.fontSize}px`;
-}
-
-// Save settings to storage
-async function saveSettings(settings) {
-    await chrome.storage.sync.set(settings);
-
-    // Notify content script of changes
-    const tabs = await chrome.tabs.query({ url: 'https://www.youtube.com/*' });
-    for (const tab of tabs) {
-        chrome.tabs.sendMessage(tab.id, { type: 'SETTINGS_UPDATED', settings });
+    try {
+        const result = await chrome.storage.sync.get(DEFAULT_SETTINGS);
+        if (enabledToggle) enabledToggle.checked = result.enabled;
+        if (panelWidthSlider) panelWidthSlider.value = result.panelWidth;
+        if (widthValue) widthValue.textContent = `${result.panelWidth}px`;
+        if (fontSizeSlider) fontSizeSlider.value = result.fontSize;
+        if (fontSizeValue) fontSizeValue.textContent = `${result.fontSize}px`;
+    } catch (err) {
+        console.error('[StreamLyrics] Failed to load settings:', err);
     }
 }
 
-// Event listeners
-enabledToggle.addEventListener('change', (e) => {
-    saveSettings({ enabled: e.target.checked });
-});
-
-panelWidthSlider.addEventListener('input', (e) => {
-    const value = parseInt(e.target.value);
-    widthValue.textContent = `${value}px`;
-    saveSettings({ panelWidth: value });
-});
-
-fontSizeSlider.addEventListener('input', (e) => {
-    const value = parseInt(e.target.value);
-    fontSizeValue.textContent = `${value}px`;
-    saveSettings({ fontSize: value });
-});
-
-resetBtn.addEventListener('click', async () => {
-    await chrome.storage.sync.set(DEFAULT_SETTINGS);
-    loadSettings();
-
-    // Notify content script
-    const tabs = await chrome.tabs.query({ url: 'https://www.youtube.com/*' });
-    for (const tab of tabs) {
-        chrome.tabs.sendMessage(tab.id, { type: 'SETTINGS_UPDATED', settings: DEFAULT_SETTINGS });
+async function broadcastSettings(settings) {
+    try {
+        const tabs = await chrome.tabs.query({ url: TARGET_URLS });
+        await Promise.all(
+            tabs.map((tab) =>
+                tab.id
+                    ? chrome.tabs
+                          .sendMessage(tab.id, { type: 'SETTINGS_UPDATED', settings })
+                          .catch(() => {
+                              /* tab may not have content script yet — ignore */
+                          })
+                    : Promise.resolve()
+            )
+        );
+    } catch (err) {
+        console.error('[StreamLyrics] Failed to broadcast settings:', err);
     }
-});
+}
 
-// Initialize
+async function saveSettings(partial) {
+    try {
+        await chrome.storage.sync.set(partial);
+        await broadcastSettings(partial);
+    } catch (err) {
+        console.error('[StreamLyrics] Failed to save settings:', err);
+    }
+}
+
+if (enabledToggle) {
+    enabledToggle.addEventListener('change', (e) => {
+        saveSettings({ enabled: e.target.checked });
+    });
+}
+
+if (panelWidthSlider && widthValue) {
+    panelWidthSlider.addEventListener('input', (e) => {
+        const value = parseInt(e.target.value, 10);
+        widthValue.textContent = `${value}px`;
+        saveSettings({ panelWidth: value });
+    });
+}
+
+if (fontSizeSlider && fontSizeValue) {
+    fontSizeSlider.addEventListener('input', (e) => {
+        const value = parseInt(e.target.value, 10);
+        fontSizeValue.textContent = `${value}px`;
+        saveSettings({ fontSize: value });
+    });
+}
+
+if (resetBtn) {
+    resetBtn.addEventListener('click', async () => {
+        await chrome.storage.sync.set(DEFAULT_SETTINGS);
+        await loadSettings();
+        await broadcastSettings(DEFAULT_SETTINGS);
+    });
+}
+
 loadSettings();

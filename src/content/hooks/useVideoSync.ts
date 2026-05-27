@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { LyricLine } from '../types';
 
-
 interface UseVideoSyncResult {
     currentLineIndex: number;
     isPaused: boolean;
@@ -11,172 +10,148 @@ interface UseVideoSyncResult {
     adjustOffset: (delta: number) => void;
     resetOffset: () => void;
     togglePlayPause: () => void;
+    setLineIndex: (index: number) => void;
 }
 
+const TIME_UPDATE_INTERVAL_MS = 100; // throttle currentTime React updates to 10 fps
+
 /**
- * Hook for syncing lyrics with video playback
- * Uses requestAnimationFrame for 60fps precision
- * Handles pause/resume detection and timing offset
+ * Sync the lyrics highlight state with YouTube's <video> element.
+ *
+ * Uses requestAnimationFrame for the line-index search but throttles the
+ * currentTime React state to avoid 60 fps re-renders.
  */
-export function useVideoSync(lines: LyricLine[], initialOffset: number = 0): UseVideoSyncResult {
+export function useVideoSync(
+    lines: LyricLine[],
+    initialOffset: number = 0,
+): UseVideoSyncResult {
     const [currentLineIndex, setCurrentLineIndex] = useState(-1);
     const [isPaused, setIsPaused] = useState(true);
     const [currentTime, setCurrentTime] = useState(0);
-    const [offset, setOffset] = useState(initialOffset); // Offset in seconds (positive = lyrics ahead, negative = lyrics behind)
+    const [offset, setOffsetState] = useState(initialOffset);
 
-    useEffect(() => {
-        setOffset(initialOffset);
-    }, [initialOffset]);
-
+    const offsetRef = useRef(initialOffset);
+    const linesRef = useRef<LyricLine[]>(lines);
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const rafIdRef = useRef<number | null>(null);
     const lastLineIndexRef = useRef(-1);
+    const lastTimeUpdateRef = useRef(0);
 
-    /**
-     * Binary search to find the current line index
-     * Applies offset to adjust timing
-     */
-    const findCurrentLineIndex = useCallback((time: number, currentOffset: number): number => {
-        if (lines.length === 0) return -1;
+    useEffect(() => {
+        offsetRef.current = initialOffset;
+        setOffsetState(initialOffset);
+    }, [initialOffset]);
 
-        // Apply offset: positive offset means lyrics should appear earlier
-        const adjustedTime = time + currentOffset;
+    useEffect(() => {
+        linesRef.current = lines;
+    }, [lines]);
+
+    const findCurrentLineIndex = useCallback((time: number): number => {
+        const ls = linesRef.current;
+        if (ls.length === 0) return -1;
+        const adjusted = time + offsetRef.current;
 
         let left = 0;
-        let right = lines.length - 1;
+        let right = ls.length - 1;
         let result = -1;
-
         while (left <= right) {
-            const mid = Math.floor((left + right) / 2);
-
-            if (lines[mid].start <= adjustedTime) {
+            const mid = (left + right) >> 1;
+            if (ls[mid].start <= adjusted) {
                 result = mid;
                 left = mid + 1;
             } else {
                 right = mid - 1;
             }
         }
-
         return result;
-    }, [lines]);
+    }, []);
 
-    /**
-     * Main sync loop using requestAnimationFrame
-     */
     const syncLoop = useCallback(() => {
         const video = videoRef.current;
-
         if (video) {
             const time = video.currentTime;
-            setCurrentTime(time);
-            setIsPaused(video.paused);
+            const now = performance.now();
 
-            // Only update line index when not paused
+            // Throttle currentTime + isPaused to 10 fps so the React tree
+            // doesn't churn.
+            if (now - lastTimeUpdateRef.current >= TIME_UPDATE_INTERVAL_MS) {
+                lastTimeUpdateRef.current = now;
+                setCurrentTime(time);
+                setIsPaused(video.paused);
+            }
+
             if (!video.paused) {
-                setOffset(currentOffset => {
-                    const newIndex = findCurrentLineIndex(time, currentOffset);
-
-                    // Only trigger state update if index changed
-                    if (newIndex !== lastLineIndexRef.current) {
-                        lastLineIndexRef.current = newIndex;
-                        setCurrentLineIndex(newIndex);
-                    }
-                    return currentOffset;
-                });
+                const newIndex = findCurrentLineIndex(time);
+                if (newIndex !== lastLineIndexRef.current) {
+                    lastLineIndexRef.current = newIndex;
+                    setCurrentLineIndex(newIndex);
+                }
             }
         }
-
         rafIdRef.current = requestAnimationFrame(syncLoop);
     }, [findCurrentLineIndex]);
 
-    /**
-     * Seek video to specific time
-     */
     const seekTo = useCallback((time: number) => {
         const video = videoRef.current;
-        if (video) {
-            video.currentTime = time;
-        }
+        if (video) video.currentTime = time;
     }, []);
 
-    /**
-     * Adjust offset by delta (in seconds)
-     */
     const adjustOffset = useCallback((delta: number) => {
-        setOffset(prev => {
-            const newOffset = Math.round((prev + delta) * 10) / 10; // Round to 0.1s
-            return Math.max(-120, Math.min(120, newOffset)); // Clamp to ±120s
+        setOffsetState((prev) => {
+            const next = clamp(roundTo1(prev + delta), -120, 120);
+            offsetRef.current = next;
+            return next;
         });
     }, []);
 
-    /**
-     * Reset offset to zero
-     */
     const resetOffset = useCallback(() => {
-        setOffset(0);
+        offsetRef.current = 0;
+        setOffsetState(0);
     }, []);
 
-    /**
-     * Toggle play/pause for sync testing
-     */
     const togglePlayPause = useCallback(() => {
         const video = videoRef.current;
-        if (video) {
-            if (video.paused) {
-                video.play();
-            } else {
-                video.pause();
-            }
-        }
+        if (!video) return;
+        if (video.paused) video.play().catch(() => {});
+        else video.pause();
     }, []);
 
-    /**
-     * Find and attach to YouTube/YouTube Music video element
-     */
-    useEffect(() => {
-        const findVideo = () => {
-            // Try multiple selectors for YouTube and YouTube Music
-            const selectors = [
-                'video.html5-main-video',           // YouTube
-                'video.video-stream',               // YouTube alternative
-                '#movie_player video',              // YouTube player
-                'ytmusic-player video',             // YouTube Music
-                '#player video',                    // YouTube Music alternative
-                'video'                             // Fallback - any video
-            ];
+    const setLineIndex = useCallback((index: number) => {
+        lastLineIndexRef.current = index;
+        setCurrentLineIndex(index);
+    }, []);
 
+    // Find video element (with retry via observer).
+    useEffect(() => {
+        const findVideo = (): boolean => {
+            const selectors = [
+                'video.html5-main-video',
+                'video.video-stream',
+                '#movie_player video',
+                'ytmusic-player video',
+                '#player video',
+                'video',
+            ];
             for (const selector of selectors) {
-                const video = document.querySelector(selector) as HTMLVideoElement | null;
-                if (video && video.src) {
-                    videoRef.current = video;
-                    console.log('[StreamLyrics] Found video element:', selector);
+                const v = document.querySelector(selector) as HTMLVideoElement | null;
+                if (v && v.src) {
+                    videoRef.current = v;
                     return true;
                 }
             }
             return false;
         };
 
-        // Try to find video immediately
         if (!findVideo()) {
-            // Retry with observer if not found
             const observer = new MutationObserver(() => {
-                if (findVideo()) {
-                    observer.disconnect();
-                }
+                if (findVideo()) observer.disconnect();
             });
-
-            observer.observe(document.body, {
-                childList: true,
-                subtree: true,
-            });
-
+            observer.observe(document.body, { childList: true, subtree: true });
             return () => observer.disconnect();
         }
     }, []);
 
-    /**
-     * Start/stop sync loop based on video availability
-     */
+    // RAF loop lifecycle.
     useEffect(() => {
         lastLineIndexRef.current = -1;
         setCurrentLineIndex(-1);
@@ -184,17 +159,13 @@ export function useVideoSync(lines: LyricLine[], initialOffset: number = 0): Use
         if (lines.length > 0) {
             rafIdRef.current = requestAnimationFrame(syncLoop);
         }
-
         return () => {
-            if (rafIdRef.current) {
-                cancelAnimationFrame(rafIdRef.current);
-            }
+            if (rafIdRef.current != null) cancelAnimationFrame(rafIdRef.current);
         };
     }, [lines, syncLoop]);
 
-    /**
-     * Handle video events for pause/play state
-     */
+    // Video pause/play/seeked event handlers — keep state in sync immediately
+    // (don't wait for the throttled RAF tick).
     useEffect(() => {
         const video = videoRef.current;
         if (!video) return;
@@ -202,12 +173,10 @@ export function useVideoSync(lines: LyricLine[], initialOffset: number = 0): Use
         const handlePause = () => setIsPaused(true);
         const handlePlay = () => setIsPaused(false);
         const handleSeeked = () => {
-            setOffset(currentOffset => {
-                const newIndex = findCurrentLineIndex(video.currentTime, currentOffset);
-                lastLineIndexRef.current = newIndex;
-                setCurrentLineIndex(newIndex);
-                return currentOffset;
-            });
+            const newIndex = findCurrentLineIndex(video.currentTime);
+            lastLineIndexRef.current = newIndex;
+            setCurrentLineIndex(newIndex);
+            setCurrentTime(video.currentTime);
         };
 
         video.addEventListener('pause', handlePause);
@@ -230,5 +199,13 @@ export function useVideoSync(lines: LyricLine[], initialOffset: number = 0): Use
         adjustOffset,
         resetOffset,
         togglePlayPause,
+        setLineIndex,
     };
+}
+
+function clamp(v: number, min: number, max: number) {
+    return Math.max(min, Math.min(max, v));
+}
+function roundTo1(v: number) {
+    return Math.round(v * 10) / 10;
 }

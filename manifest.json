@@ -10,13 +10,13 @@
     },
     "permissions": [
         "activeTab",
-        "storage"
+        "storage",
+        "scripting"
     ],
     "host_permissions": [
         "https://www.youtube.com/*",
         "https://music.youtube.com/*",
-        "https://lrclib.net/*",
-        "https://test-0k.onrender.com/*"
+        "https://lrclib.net/*"
     ],
     "action": {
         "default_icon": {
@@ -24,6 +24,10 @@
             "48": "icons/icon48.png"
         },
         "default_title": "Toggle StreamLyrics Panel"
+    },
+    "options_ui": {
+        "page": "src/popup/popup.html",
+        "open_in_tab": false
     },
     "content_scripts": [
         {
@@ -34,7 +38,6 @@
             "js": [
                 "src/content/index.tsx"
             ],
-            "css": [],
             "run_at": "document_idle"
         }
     ],
@@ -42,16 +45,7 @@
         "service_worker": "src/background/service-worker.ts",
         "type": "module"
     },
-    "web_accessible_resources": [
-        {
-            "resources": [
-                "fonts/*",
-                "icons/*"
-            ],
-            "matches": [
-                "https://www.youtube.com/*",
-                "https://music.youtube.com/*"
-            ]
-        }
-    ]
+    "content_security_policy": {
+        "extension_pages": "script-src 'self'; object-src 'self';"
+    }
 }

@@ -1,82 +1,106 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Panel } from './components/Panel';
 import { useSettings } from './hooks/useSettings';
 
+/**
+ * Error boundary so a crash inside Panel/hooks doesn't leave a blank shadow
+ * DOM. Users get a tiny fallback with a retry button.
+ */
+class PanelErrorBoundary extends React.Component<
+    { children: React.ReactNode },
+    { error: Error | null }
+> {
+    state: { error: Error | null } = { error: null };
+
+    static getDerivedStateFromError(error: Error) {
+        return { error };
+    }
+
+    componentDidCatch(error: Error, info: React.ErrorInfo) {
+        console.error('[StreamLyrics] Panel crashed:', error, info);
+    }
+
+    render() {
+        if (!this.state.error) return this.props.children;
+
+        return (
+            <div className="streamlyrics-error">
+                <div>StreamLyrics ran into a problem.</div>
+                <button
+                    onClick={() => this.setState({ error: null })}
+                    className="retry-btn"
+                    type="button"
+                >
+                    Retry
+                </button>
+            </div>
+        );
+    }
+}
+
+interface AppProps {
+    styles?: string;
+    initialVisible?: boolean;
+}
 
 /**
- * Main App component
- * Manages panel visibility and Picture-in-Picture mode
+ * Top-level app inside the shadow DOM. Owns:
+ * - Persisted panel-visibility flag
+ * - The TOGGLE_PANEL message listener (only one, here)
+ * - Picture-in-Picture window lifecycle
  */
-export const App: React.FC<{ styles?: string; initialVisible?: boolean }> = ({ styles, initialVisible = false }) => {
+export const App: React.FC<AppProps> = ({ styles, initialVisible = false }) => {
     const [isVisible, setIsVisible] = useState(initialVisible);
     const [isLoaded, setIsLoaded] = useState(false);
-    const [isPipMode, setIsPipMode] = useState(false);
     const [pipWindow, setPipWindow] = useState<Window | null>(null);
+    const isPipMode = pipWindow !== null;
     const settings = useSettings();
 
-    // Load saved visibility state on mount
+    // Restore saved visibility.
     useEffect(() => {
-        if (typeof chrome !== 'undefined' && chrome.storage?.local) {
-            chrome.storage.local.get(['panelVisible'], (result) => {
-                if (result.panelVisible === true) {
-                    setIsVisible(true);
-                }
-                setIsLoaded(true);
-            });
-        } else {
+        if (typeof chrome === 'undefined' || !chrome.storage?.local) {
             setIsLoaded(true);
+            return;
         }
+        chrome.storage.local.get(['panelVisible'], (result) => {
+            if (result.panelVisible === true) setIsVisible(true);
+            setIsLoaded(true);
+        });
     }, []);
 
-    // Save visibility state when it changes
+    // Persist visibility changes (after initial load).
     useEffect(() => {
-        if (isLoaded && typeof chrome !== 'undefined' && chrome.storage?.local) {
-            chrome.storage.local.set({ panelVisible: isVisible });
-        }
+        if (!isLoaded) return;
+        if (typeof chrome === 'undefined' || !chrome.storage?.local) return;
+        chrome.storage.local.set({ panelVisible: isVisible });
     }, [isVisible, isLoaded]);
 
-    // Listen for toggle messages from extension icon click
+    // Single TOGGLE_PANEL listener for the whole app.
     useEffect(() => {
+        if (typeof chrome === 'undefined' || !chrome.runtime?.onMessage) return;
+
         const handleMessage = (message: { type: string }) => {
-            if (message.type === 'TOGGLE_PANEL') {
-                setIsVisible((prev) => {
-                    const newValue = !prev;
-                    console.log('[StreamLyrics] Panel toggled to:', newValue);
-                    return newValue;
-                });
-            }
+            if (message?.type !== 'TOGGLE_PANEL') return;
+            setIsVisible((prev) => !prev);
         };
 
-        if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
-            chrome.runtime.onMessage.addListener(handleMessage);
-            return () => {
-                chrome.runtime.onMessage.removeListener(handleMessage);
-            };
-        }
+        chrome.runtime.onMessage.addListener(handleMessage);
+        return () => chrome.runtime.onMessage.removeListener(handleMessage);
     }, []);
 
-    // Handle PIP window close
+    // Detect PiP window close.
     useEffect(() => {
-        if (pipWindow) {
-            const handleUnload = () => {
-                console.log('[StreamLyrics] PIP window closed');
-                setIsPipMode(false);
-                setPipWindow(null);
-            };
-
-            pipWindow.addEventListener('unload', handleUnload);
-            return () => {
-                pipWindow.removeEventListener('unload', handleUnload);
-            };
-        }
+        if (!pipWindow) return;
+        const handleUnload = () => setPipWindow(null);
+        pipWindow.addEventListener('pagehide', handleUnload);
+        return () => pipWindow.removeEventListener('pagehide', handleUnload);
     }, [pipWindow]);
 
-    /**
-     * Open Picture-in-Picture window
-     */
-    const openPipWindow = async () => {
+    const openPipWindow = useCallback(async () => {
         if (!('documentPictureInPicture' in window)) {
-            alert('Picture-in-Picture is not supported in this browser. Please use Chrome 116+');
+            alert(
+                'Picture-in-Picture is not supported in this browser. Please use Chrome 116+',
+            );
             return;
         }
 
@@ -86,60 +110,64 @@ export const App: React.FC<{ styles?: string; initialVisible?: boolean }> = ({ s
                 height: 600,
             });
 
-            console.log('[StreamLyrics] PIP window opened');
             setPipWindow(pipWin);
-            setIsPipMode(true);
 
-            pipWin.document.documentElement.style.width = '100%';
-            pipWin.document.documentElement.style.height = '100%';
-            pipWin.document.body.style.width = '100%';
-            pipWin.document.body.style.height = '100%';
-            pipWin.document.body.style.margin = '0';
-            pipWin.document.body.style.overflow = 'hidden';
-            pipWin.document.body.style.background = '#111';
+            const { documentElement, body, head } = pipWin.document;
+            documentElement.style.width = '100%';
+            documentElement.style.height = '100%';
+            body.style.width = '100%';
+            body.style.height = '100%';
+            body.style.margin = '0';
+            body.style.overflow = 'hidden';
+            body.style.background = '#111';
 
-            // Inject styles into PIP window
+            // Override the default title bar text (which would otherwise show
+            // the host origin like "music.youtube.com") with our brand. The
+            // Panel keeps it updated with the current track after this.
+            pipWin.document.title = 'StreamLyrics';
+
+            // Replace the favicon with our extension icon for the title bar.
+            try {
+                if (typeof chrome !== 'undefined' && chrome.runtime?.getURL) {
+                    const iconLink = pipWin.document.createElement('link');
+                    iconLink.rel = 'icon';
+                    iconLink.type = 'image/png';
+                    iconLink.href = chrome.runtime.getURL('icons/icon48.png');
+                    head.appendChild(iconLink);
+                }
+            } catch {
+                /* ignore — favicon is best-effort */
+            }
+
             if (styles) {
                 const styleEl = pipWin.document.createElement('style');
                 styleEl.textContent = styles;
-                pipWin.document.head.appendChild(styleEl);
-
-                // Add Google Fonts
-                const fontLink = pipWin.document.createElement('link');
-                fontLink.rel = 'stylesheet';
-                fontLink.href = 'https://fonts.googleapis.com/css2?family=Figtree:wght@400;600;800&display=swap';
-                pipWin.document.head.appendChild(fontLink);
+                head.appendChild(styleEl);
             }
-
         } catch (error) {
             console.error('[StreamLyrics] Failed to open PIP window:', error);
         }
-    };
+    }, [styles]);
 
-    /**
-     * Close Picture-in-Picture window
-     */
-    const closePipWindow = () => {
-        if (pipWindow) {
-            pipWindow.close();
-        }
-        setIsPipMode(false);
+    const closePipWindow = useCallback(() => {
+        if (pipWindow) pipWindow.close();
         setPipWindow(null);
-    };
+    }, [pipWindow]);
 
-    // Don't render until we've loaded the saved state
     if (!isLoaded) return null;
 
     const effectiveIsVisible = isVisible && settings.enabled;
 
     return (
-        <Panel
-            isVisible={effectiveIsVisible}
-            isPipMode={isPipMode}
-            pipWindow={pipWindow}
-            onOpenPip={openPipWindow}
-            onClosePip={closePipWindow}
-            settings={settings}
-        />
+        <PanelErrorBoundary>
+            <Panel
+                isVisible={effectiveIsVisible}
+                isPipMode={isPipMode}
+                pipWindow={pipWindow}
+                onOpenPip={openPipWindow}
+                onClosePip={closePipWindow}
+                settings={settings}
+            />
+        </PanelErrorBoundary>
     );
 };

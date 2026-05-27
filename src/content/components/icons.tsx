@@ -1,5 +1,3 @@
-import React from 'react';
-
 export const PrevIcon = ({ size = 18 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
     <path d="M6 6v12M18 7l-8 5 8 5V7Z" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />

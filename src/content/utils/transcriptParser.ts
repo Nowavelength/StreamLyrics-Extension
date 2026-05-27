@@ -16,9 +16,6 @@ export interface LyricsSearchCandidate {
     reason: string;
 }
 
-/**
- * Custom error classes for YouTube transcript operations
- */
 export class TranscriptsDisabledError extends Error {
     constructor(videoId: string) {
         super(`Transcripts are disabled for video: ${videoId}`);
@@ -42,20 +39,18 @@ export class VideoUnavailableError extends Error {
 }
 
 /**
- * Parse YouTube's timedtext XML format into LyricLine array
+ * Parse YouTube's timedtext XML into a LyricLine[].
  */
 export function parseYouTubeTranscript(xmlText: string): LyricLine[] {
     const parser = new DOMParser();
     const doc = parser.parseFromString(xmlText, 'text/xml');
-    const textElements = doc.querySelectorAll('text');
-
+    const elements = doc.querySelectorAll('text');
     const lines: LyricLine[] = [];
 
-    textElements.forEach((el) => {
+    elements.forEach((el) => {
         const start = parseFloat(el.getAttribute('start') || '0');
         const duration = parseFloat(el.getAttribute('dur') || '2');
         const text = decodeHTMLEntities(el.textContent || '');
-
         if (text.trim()) {
             lines.push({ start, duration, text: text.trim() });
         }
@@ -65,260 +60,209 @@ export function parseYouTubeTranscript(xmlText: string): LyricLine[] {
 }
 
 /**
- * Parse LRC format from Lrclib into LyricLine array
- * LRC format: [mm:ss.xx] text
+ * Parse LRC text. Handles single AND multi-timestamp lines:
+ *   [00:01.00]Hello
+ *   [00:05.00][00:30.00]Same lyric repeated
  */
 export function parseLrcFormat(lrcText: string): LyricLine[] {
     const lines: LyricLine[] = [];
-    const regex = /\[(\d{2}):(\d{2})\.(\d{2,3})\]\s*(.+)/g;
+    const tsPattern = /\[(\d{1,2}):(\d{2})\.(\d{2,3})\]/g;
 
-    let match;
-    while ((match = regex.exec(lrcText)) !== null) {
-        const minutes = parseInt(match[1], 10);
-        const seconds = parseInt(match[2], 10);
-        const milliseconds = parseInt(match[3].padEnd(3, '0'), 10);
-        const text = match[4].trim();
+    for (const rawLine of lrcText.split(/\r?\n/)) {
+        // Collect every timestamp prefix on the line.
+        const stamps: number[] = [];
+        let match: RegExpExecArray | null;
+        let lastEnd = 0;
+        tsPattern.lastIndex = 0;
+        while ((match = tsPattern.exec(rawLine)) !== null) {
+            // Only accept timestamps that are contiguous from the start (no
+            // text between them).
+            if (match.index !== lastEnd) break;
+            const minutes = parseInt(match[1], 10);
+            const seconds = parseInt(match[2], 10);
+            const fractional = parseInt(match[3].padEnd(3, '0'), 10);
+            stamps.push(minutes * 60 + seconds + fractional / 1000);
+            lastEnd = match.index + match[0].length;
+        }
+        if (stamps.length === 0) continue;
 
-        const start = minutes * 60 + seconds + milliseconds / 1000;
+        const text = rawLine.slice(lastEnd).trim();
+        // Skip metadata-only lines like [ar:Artist], [length:03:14] etc.
+        if (!text) continue;
 
-        if (text) {
+        for (const start of stamps) {
             lines.push({ start, duration: 0, text });
         }
     }
 
-    // Calculate durations based on next line's start time
+    // Sort by start time (multi-timestamp lines may be out of order).
+    lines.sort((a, b) => a.start - b.start);
+
+    // Compute durations from neighbours.
     for (let i = 0; i < lines.length - 1; i++) {
         lines[i].duration = lines[i + 1].start - lines[i].start;
     }
-
-    // Last line gets a default duration
     if (lines.length > 0) {
-        lines[lines.length - 1].duration = 5;
+        lines[lines.length - 1].duration = Math.max(
+            5,
+            lines[lines.length - 1].duration,
+        );
     }
 
     return lines;
 }
 
 /**
- * Decode HTML entities in text
+ * Decode HTML entities. The textarea trick handles all named & numeric
+ * entities natively.
  */
 function decodeHTMLEntities(text: string): string {
     const textarea = document.createElement('textarea');
     textarea.innerHTML = text;
-    return textarea.value
-        .replace(/&#39;/g, "'")
-        .replace(/&quot;/g, '"')
-        .replace(/&amp;/g, '&')
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/\n/g, ' ');
+    return textarea.value.replace(/\n/g, ' ');
 }
 
+const NOISE_PATTERNS: RegExp[] = [
+    /\(\s*official\s*(music\s*)?video\s*\)/gi,
+    /\[\s*official\s*(music\s*)?video\s*\]/gi,
+    /\b official\s*(music\s*)?video \b/gi,
+    /\(\s*official\s*audio\s*\)/gi,
+    /\[\s*official\s*audio\s*\]/gi,
+    /\(\s*lyrics?\s*(video)?\s*\)/gi,
+    /\[\s*lyrics?\s*(video)?\s*\]/gi,
+    /\b lyrics?\s*video \b/gi,
+    /\(\s*audio\s*\)/gi,
+    /\[\s*audio\s*\]/gi,
+    /\(\s*visualizer\s*\)/gi,
+    /\[\s*visualizer\s*\]/gi,
+    // Quality tags — only inside parens/brackets OR as standalone words.
+    /[\(\[]\s*(4K|HD|HQ|1080p|720p)\s*[\)\]]/gi,
+    /(?:^|\s)(4K|HD|HQ|1080p|720p)(?=$|\s)/g,
+];
+
 /**
- * Clean video title for lyrics search
- * Removes common patterns like "Official Video", "4K", etc.
+ * Clean a YouTube video title and split it into artist / track.
  */
-export function cleanVideoTitle(title: string): { artist: string; track: string } {
-    let cleaned = title
-        // Remove common video descriptors
-        .replace(/\(Official\s*(Music\s*)?Video\)/gi, '')
-        .replace(/\[Official\s*(Music\s*)?Video\]/gi, '')
-        .replace(/Official\s*(Music\s*)?Video/gi, '')
-        .replace(/\(Official\s*Audio\)/gi, '')
-        .replace(/\[Official\s*Audio\]/gi, '')
-        .replace(/\(Lyrics?\s*(Video)?\)/gi, '')
-        .replace(/\[Lyrics?\s*(Video)?\]/gi, '')
-        .replace(/Lyrics?\s*Video/gi, '')
-        .replace(/\(Audio\)/gi, '')
-        .replace(/\[Audio\]/gi, '')
-        .replace(/\(Visualizer\)/gi, '')
-        .replace(/\[Visualizer\]/gi, '')
-        // Remove quality indicators
-        .replace(/\(?4K\)?/gi, '')
-        .replace(/\(?HD\)?/gi, '')
-        .replace(/\(?HQ\)?/gi, '')
-        .replace(/\(?1080p\)?/gi, '')
-        .replace(/\(?720p\)?/gi, '')
-        // Remove featuring patterns for cleaner search
-        .replace(/ft\.\s*/gi, 'feat. ')
-        .replace(/feat\s+/gi, 'feat. ')
-        // Clean up extra whitespace
+export function cleanVideoTitle(title: string): {
+    artist: string;
+    track: string;
+} {
+    let cleaned = title;
+    for (const pattern of NOISE_PATTERNS) {
+        cleaned = cleaned.replace(pattern, ' ');
+    }
+    cleaned = cleaned
+        .replace(/\bft\.\s*/gi, 'feat. ')
+        .replace(/\bfeat\s+/gi, 'feat. ')
         .replace(/\s+/g, ' ')
         .trim();
 
-    // Try to split artist - track
     let artist = '';
     let track = cleaned;
 
-    // YouTube formats:
-    // 1. "Track Name" Movie/Album | Artist(s)
-    // 2. Artist - Track
-    // 3. Track | Artist
-
-    // Check for pipe separator (most common on YT Music)
     if (cleaned.includes(' | ')) {
         const parts = cleaned.split(' | ');
-
-        // If first part has quotes, it's likely: "Track" Album | Artist
         if (parts[0].includes('"')) {
             const trackMatch = parts[0].match(/"([^"]+)"/);
             if (trackMatch) {
                 track = trackMatch[1].trim();
-                artist = parts[parts.length - 1].trim(); // Last part is usually artist
-            }
-        } else {
-            // Standard: Track | Artist or Artist | Track
-            // If last part has commas (multiple artists), it's likely: Track | Artist1, Artist2
-            if (parts[parts.length - 1].includes(',')) {
-                track = parts[0].trim();
                 artist = parts[parts.length - 1].trim();
-            } else {
-                // Guess: shorter part is likely the artist
-                if (parts[0].length < parts[1].length) {
-                    artist = parts[0].trim();
-                    track = parts[1].trim();
-                } else {
-                    track = parts[0].trim();
-                    artist = parts[1].trim();
-                }
             }
+        } else if (parts[parts.length - 1].includes(',')) {
+            track = parts[0].trim();
+            artist = parts[parts.length - 1].trim();
+        } else if (parts[0].length < parts[1].length) {
+            artist = parts[0].trim();
+            track = parts[1].trim();
+        } else {
+            track = parts[0].trim();
+            artist = parts[1].trim();
         }
-    }
-    // Check for dash separator (common format)
-    else if (cleaned.includes(' - ')) {
+    } else if (cleaned.includes(' - ')) {
         const parts = cleaned.split(' - ');
         artist = parts[0].trim();
         track = parts.slice(1).join(' - ').trim();
-    }
-    // Check for other separators
-    else if (/\s+[–—]\s+/.test(cleaned)) {
+    } else if (/\s+[–—]\s+/.test(cleaned)) {
         const parts = cleaned.split(/\s+[–—]\s+/);
         artist = parts[0].trim();
         track = parts.slice(1).join(' - ').trim();
     }
 
-    // Fallback: if we still don't have an artist, use the whole title as track
-    if (!artist && !track) {
-        track = cleaned;
-    }
-
+    if (!artist && !track) track = cleaned;
     return { artist, track };
 }
 
 /**
- * Extract video ID from any valid YouTube URL format
- * Supports:
- * - youtube.com/watch?v=VIDEO_ID
- * - youtu.be/VIDEO_ID
- * - youtube.com/embed/VIDEO_ID
- * - youtube.com/v/VIDEO_ID
- * - music.youtube.com/watch?v=VIDEO_ID
- * 
- * @param url - Optional URL to parse (defaults to current window.location)
- * @returns Video ID or null if not found
+ * Extract a YouTube video ID from any common URL form.
  */
 export function getVideoId(url?: string): string | null {
-    const targetUrl = url || window.location.href;
+    const target = url || window.location.href;
 
-    // Method 1: Query parameter (most common)
     try {
-        const urlObj = new URL(targetUrl);
-        const videoId = urlObj.searchParams.get('v');
-        if (videoId) {
-            return videoId;
-        }
-    } catch (e) {
-        // Invalid URL, try other methods
+        const u = new URL(target);
+        const v = u.searchParams.get('v');
+        if (v) return v;
+    } catch {
+        /* not a URL */
     }
 
-    // Method 2: youtu.be short links
-    const youtuBeMatch = targetUrl.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/);
-    if (youtuBeMatch) {
-        return youtuBeMatch[1];
+    const patterns = [
+        /youtu\.be\/([a-zA-Z0-9_-]{11})/,
+        /youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/,
+        /youtube\.com\/v\/([a-zA-Z0-9_-]{11})/,
+        /[?&]v=([a-zA-Z0-9_-]{11})/,
+    ];
+    for (const re of patterns) {
+        const m = target.match(re);
+        if (m) return m[1];
     }
-
-    // Method 3: Embed URLs
-    const embedMatch = targetUrl.match(/youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/);
-    if (embedMatch) {
-        return embedMatch[1];
-    }
-
-    // Method 4: /v/ format
-    const vMatch = targetUrl.match(/youtube\.com\/v\/([a-zA-Z0-9_-]{11})/);
-    if (vMatch) {
-        return vMatch[1];
-    }
-
-    // Method 5: Extract from any URL containing 11-character video ID pattern
-    const genericMatch = targetUrl.match(/[?&]v=([a-zA-Z0-9_-]{11})/);
-    if (genericMatch) {
-        return genericMatch[1];
-    }
-
     return null;
 }
 
-/**
- * Get video title from page (works for YouTube and YouTube Music)
- */
+const YT_MUSIC_TITLE_SELECTORS = [
+    'ytmusic-player-bar .title.ytmusic-player-bar',
+    'ytmusic-player-bar .content-info-wrapper .title',
+    '.ytmusic-player-bar .title',
+    'ytmusic-player-bar yt-formatted-string.title',
+    '.content-info-wrapper yt-formatted-string.title',
+];
+
+const YT_TITLE_SELECTORS = [
+    '#title h1 yt-formatted-string',
+    'h1.ytd-video-primary-info-renderer yt-formatted-string',
+    '#above-the-fold #title yt-formatted-string',
+    'ytd-watch-metadata #title yt-formatted-string',
+    '#info-contents h1',
+    'h1.title',
+];
+
 export function getVideoTitle(): string {
-    // YouTube Music selectors - check multiple locations
-    const ytMusicSelectors = [
-        'ytmusic-player-bar .title.ytmusic-player-bar',
-        'ytmusic-player-bar .content-info-wrapper .title',
-        '.ytmusic-player-bar .title',
-        'ytmusic-player-bar yt-formatted-string.title',
-        '.content-info-wrapper yt-formatted-string.title',
-    ];
-
-    for (const selector of ytMusicSelectors) {
+    for (const selector of YT_MUSIC_TITLE_SELECTORS) {
         const el = document.querySelector(selector);
-        if (el?.textContent?.trim()) {
-            return el.textContent.trim();
-        }
+        const text = el?.textContent?.trim();
+        if (text) return text;
     }
-
-    // YouTube selectors - check multiple locations
-    const ytSelectors = [
-        '#title h1 yt-formatted-string',
-        'h1.ytd-video-primary-info-renderer yt-formatted-string',
-        '#above-the-fold #title yt-formatted-string',
-        'ytd-watch-metadata #title yt-formatted-string',
-        '#info-contents h1',
-        'h1.title',
-    ];
-
-    for (const selector of ytSelectors) {
+    for (const selector of YT_TITLE_SELECTORS) {
         const el = document.querySelector(selector);
-        if (el?.textContent?.trim()) {
-            return el.textContent.trim();
-        }
+        const text = el?.textContent?.trim();
+        if (text) return text;
     }
-
-    // Fallback to document title
-    const docTitle = document.title
+    return document.title
         .replace(' - YouTube Music', '')
         .replace(' - YouTube', '')
         .trim();
-
-    return docTitle;
 }
 
 function uniqueNonEmpty(values: string[]): string[] {
     const seen = new Set<string>();
     const result: string[] = [];
-
     for (const value of values) {
         const normalized = value.replace(/\s+/g, ' ').trim();
         const key = normalized.toLowerCase();
-        if (!normalized || seen.has(key)) {
-            continue;
-        }
-
+        if (!normalized || seen.has(key)) continue;
         seen.add(key);
         result.push(normalized);
     }
-
     return result;
 }
 
@@ -326,9 +270,18 @@ function stripDecorators(value: string): string {
     return value
         .replace(/\(\s*from\s+["'][^"']+["']\s*\)/gi, '')
         .replace(/\[\s*from\s+["'][^"']+["']\s*\]/gi, '')
-        .replace(/\([^)]*(official|music\s*video|lyric|lyrics|lyrical|full\s*video|full\s*song|audio|visualizer|4k|hd|hq|1080p|720p)[^)]*\)/gi, '')
-        .replace(/\[[^\]]*(official|music\s*video|lyric|lyrics|lyrical|full\s*video|full\s*song|audio|visualizer|4k|hd|hq|1080p|720p)[^\]]*\]/gi, '')
-        .replace(/\b(official|music\s*video|lyric\s*video|lyrics\s*video|lyrical\s*video|full\s*video|full\s*song|audio|visualizer|4k|hd|hq|1080p|720p)\b/gi, '')
+        .replace(
+            /\([^)]*(official|music\s*video|lyric|lyrics|lyrical|full\s*video|full\s*song|audio|visualizer|4k|hd|hq|1080p|720p)[^)]*\)/gi,
+            '',
+        )
+        .replace(
+            /\[[^\]]*(official|music\s*video|lyric|lyrics|lyrical|full\s*video|full\s*song|audio|visualizer|4k|hd|hq|1080p|720p)[^\]]*\]/gi,
+            '',
+        )
+        .replace(
+            /\b(official|music\s*video|lyric\s*video|lyrics\s*video|lyrical\s*video|full\s*video|full\s*song|audio|visualizer|4k|hd|hq|1080p|720p)\b/gi,
+            '',
+        )
         .replace(/\s+/g, ' ')
         .trim();
 }
@@ -336,7 +289,14 @@ function stripDecorators(value: string): string {
 function splitPeople(value: string): string[] {
     return value
         .split(/\s*(?:,|&|\band\b|\/|\+)\s*/i)
-        .map((part) => cleanArtistText(part.replace(/\b(feat|ft|with|singer|singers|music|lyrics?|composer|starring)\b\.?/gi, '')))
+        .map((part) =>
+            cleanArtistText(
+                part.replace(
+                    /\b(feat|ft|with|singer|singers|music|lyrics?|composer|starring)\b\.?/gi,
+                    '',
+                ),
+            ),
+        )
         .filter(Boolean);
 }
 
@@ -353,11 +313,9 @@ function cleanArtistText(value: string): string {
 
 function artistVariants(value: string): string[] {
     const variants = [value];
-
     if (/^a\.?\s*r\.?\s+rahman$/i.test(value)) {
         variants.push('A.R. Rahman', 'AR Rahman', 'A R Rahman');
     }
-
     return variants;
 }
 
@@ -370,20 +328,14 @@ function addCandidate(
     seen: Set<string>,
     artist: string,
     track: string,
-    reason: string
+    reason: string,
 ) {
     const cleanArtist = stripDecorators(artist);
     const cleanTrack = stripDecorators(track);
-
-    if (!cleanTrack || cleanTrack.length < 2) {
-        return;
-    }
+    if (!cleanTrack || cleanTrack.length < 2) return;
 
     const key = `${cleanArtist.toLowerCase()}|${cleanTrack.toLowerCase()}`;
-    if (seen.has(key)) {
-        return;
-    }
-
+    if (seen.has(key)) return;
     seen.add(key);
     candidates.push({
         artist: cleanArtist,
@@ -393,7 +345,10 @@ function addCandidate(
     });
 }
 
-export function getLyricsSearchCandidates(rawTitle: string, info?: Partial<CurrentTrackInfo>): LyricsSearchCandidate[] {
+export function getLyricsSearchCandidates(
+    rawTitle: string,
+    info?: Partial<CurrentTrackInfo>,
+): LyricsSearchCandidate[] {
     const title = rawTitle.replace(/\s+/g, ' ').trim();
     const parsed = cleanVideoTitle(title);
     const pipeParts = uniqueNonEmpty(title.split('|').map(stripDecorators));
@@ -401,7 +356,9 @@ export function getLyricsSearchCandidates(rawTitle: string, info?: Partial<Curre
     const contributorParts = pipeParts.slice(1);
     const colonParts = mainPart.split(/\s*:\s*/).map(stripDecorators).filter(Boolean);
 
-    const titleWithoutChannel = stripDecorators(mainPart.replace(/\s+-\s+Topic$/i, ''));
+    const titleWithoutChannel = stripDecorators(
+        mainPart.replace(/\s+-\s+Topic$/i, ''),
+    );
     const trackSeeds = uniqueNonEmpty([
         colonParts.length > 1 ? colonParts[colonParts.length - 1] : '',
         parsed.track,
@@ -410,12 +367,16 @@ export function getLyricsSearchCandidates(rawTitle: string, info?: Partial<Curre
         colonParts[0] || '',
     ]);
 
-    const artistSeeds = uniqueNonEmpty([
-        ...(info?.artist ? splitPeople(info.artist) : []),
-        ...(parsed.artist ? splitPeople(parsed.artist) : []),
-        ...contributorParts.flatMap(splitPeople),
-    ].flatMap(artistVariants)).slice(0, 10);
-    const mediaOnlyTrack = info?.title && !titleWithoutChannel ? info.title : '';
+    const artistSeeds = uniqueNonEmpty(
+        [
+            ...(info?.artist ? splitPeople(info.artist) : []),
+            ...(parsed.artist ? splitPeople(parsed.artist) : []),
+            ...contributorParts.flatMap(splitPeople),
+        ].flatMap(artistVariants),
+    ).slice(0, 10);
+
+    const mediaOnlyTrack =
+        info?.title && !titleWithoutChannel ? info.title : '';
     const finalTrackSeeds = uniqueNonEmpty([...trackSeeds, mediaOnlyTrack]);
 
     const candidates: LyricsSearchCandidate[] = [];
@@ -426,13 +387,17 @@ export function getLyricsSearchCandidates(rawTitle: string, info?: Partial<Curre
             addCandidate(candidates, seen, artist, track, 'artist-track');
         }
     }
-
     for (const track of finalTrackSeeds) {
         addCandidate(candidates, seen, '', track, 'track-only');
     }
-
     if (parsed.artist && parsed.track) {
-        addCandidate(candidates, seen, parsed.track, parsed.artist, 'swapped artist-track');
+        addCandidate(
+            candidates,
+            seen,
+            parsed.track,
+            parsed.artist,
+            'swapped artist-track',
+        );
     }
 
     return candidates.slice(0, 24);
@@ -442,17 +407,17 @@ function getFirstText(selectors: string[]): string {
     for (const selector of selectors) {
         const el = document.querySelector(selector);
         const text = el?.textContent?.trim();
-        if (text) {
-            return text.replace(/\s+/g, ' ');
-        }
+        if (text) return text.replace(/\s+/g, ' ');
     }
-
     return '';
 }
 
-function getMediaSessionInfo(): { title: string; artist: string; album: string } {
+function getMediaSessionInfo(): {
+    title: string;
+    artist: string;
+    album: string;
+} {
     const metadata = (navigator as any).mediaSession?.metadata;
-
     return {
         title: metadata?.title?.trim?.() || '',
         artist: metadata?.artist?.trim?.() || '',
@@ -460,30 +425,33 @@ function getMediaSessionInfo(): { title: string; artist: string; album: string }
     };
 }
 
+const YT_MUSIC_ARTIST_SELECTORS = [
+    'ytmusic-player-bar .byline',
+    'ytmusic-player-bar .subtitle',
+    'ytmusic-player-bar .secondary-flex-columns yt-formatted-string',
+    'ytmusic-player-bar .subtitle.ytmusic-player-bar',
+    'ytmusic-player-bar .content-info-wrapper .subtitle',
+    'ytmusic-player-bar yt-formatted-string.subtitle',
+    '.content-info-wrapper yt-formatted-string.subtitle',
+    'ytmusic-player-page .byline',
+    'ytmusic-player-page .subtitle',
+    'ytmusic-player-page yt-formatted-string.byline',
+    'ytmusic-player-page yt-formatted-string.subtitle',
+    'ytmusic-responsive-list-item-renderer a[href*="/channel/"]',
+    'ytmusic-responsive-list-item-renderer a[href*="/browse/"]',
+];
+
+const YT_ARTIST_SELECTORS = [
+    'ytd-watch-metadata ytd-video-owner-renderer #channel-name a',
+    '#owner #channel-name a',
+    '#upload-info #channel-name a',
+];
+
 export function getVideoArtist(): string {
     const isYouTubeMusic = window.location.hostname === 'music.youtube.com';
-    const ytMusicSelectors = [
-        'ytmusic-player-bar .byline',
-        'ytmusic-player-bar .subtitle',
-        'ytmusic-player-bar .secondary-flex-columns yt-formatted-string',
-        'ytmusic-player-bar .subtitle.ytmusic-player-bar',
-        'ytmusic-player-bar .content-info-wrapper .subtitle',
-        'ytmusic-player-bar yt-formatted-string.subtitle',
-        '.content-info-wrapper yt-formatted-string.subtitle',
-        'ytmusic-player-page .byline',
-        'ytmusic-player-page .subtitle',
-        'ytmusic-player-page yt-formatted-string.byline',
-        'ytmusic-player-page yt-formatted-string.subtitle',
-        'ytmusic-responsive-list-item-renderer a[href*="/channel/"]',
-        'ytmusic-responsive-list-item-renderer a[href*="/browse/"]',
-    ];
-    const ytSelectors = [
-        'ytd-watch-metadata ytd-video-owner-renderer #channel-name a',
-        '#owner #channel-name a',
-        '#upload-info #channel-name a',
-    ];
-    const text = getFirstText(isYouTubeMusic ? ytMusicSelectors : ytSelectors);
-
+    const text = getFirstText(
+        isYouTubeMusic ? YT_MUSIC_ARTIST_SELECTORS : YT_ARTIST_SELECTORS,
+    );
     return cleanArtistText(text);
 }
 
@@ -491,24 +459,21 @@ function normalizeTrackPart(value: string): string {
     return value.toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
-/**
- * Build a stable identity for the currently playing track.
- * Media Session metadata keeps updating even when the YouTube tab is hidden,
- * so it is a useful companion to DOM title polling for the popout window.
- */
 export function getCurrentTrackInfo(): CurrentTrackInfo {
     const media = getMediaSessionInfo();
     const pageTitle = getVideoTitle();
     const parsed = cleanVideoTitle(pageTitle);
     const isYouTubeMusic = window.location.hostname === 'music.youtube.com';
     const title = isYouTubeMusic
-        ? (media.title || parsed.track || pageTitle)
-        : (parsed.track || pageTitle || media.title);
+        ? media.title || parsed.track || pageTitle
+        : parsed.track || pageTitle || media.title;
     const artist = media.artist || getVideoArtist() || parsed.artist;
     const album = media.album || '';
     const videoId = getVideoId();
-    const signatureParts = [videoId || '', title, artist, album].map(normalizeTrackPart);
-    const signature = signatureParts.filter(Boolean).join('|');
+    const signature = [videoId || '', title, artist, album]
+        .map(normalizeTrackPart)
+        .filter(Boolean)
+        .join('|');
 
     return {
         rawTitle: pageTitle,
@@ -520,46 +485,32 @@ export function getCurrentTrackInfo(): CurrentTrackInfo {
     };
 }
 
-export function getLyricsSearchTitle(info: CurrentTrackInfo = getCurrentTrackInfo()): string {
-    if (info.artist && info.title.toLowerCase().startsWith(`${info.artist.toLowerCase()} - `)) {
+export function getLyricsSearchTitle(
+    info: CurrentTrackInfo = getCurrentTrackInfo(),
+): string {
+    if (
+        info.artist &&
+        info.title.toLowerCase().startsWith(`${info.artist.toLowerCase()} - `)
+    ) {
         return info.title;
     }
-
-    if (info.artist) {
-        return `${info.artist} - ${info.title}`;
-    }
-
+    if (info.artist) return `${info.artist} - ${info.title}`;
     return info.title;
 }
 
-/**
- * Convert transcript array to full plain text
- * Concatenates all text segments with proper spacing
- * 
- * @param transcript - Array of LyricLine objects
- * @returns Full text content as a single string
- */
 export function getFullText(transcript: LyricLine[]): string {
-    if (!transcript || transcript.length === 0) {
-        return '';
-    }
-
+    if (!transcript || transcript.length === 0) return '';
     return transcript
-        .map(line => line.text.trim())
-        .filter(text => text.length > 0)
+        .map((line) => line.text.trim())
+        .filter((text) => text.length > 0)
         .join(' ');
 }
 
-/**
- * Get transcript in structured format
- * Simplified interface matching Python youtube-transcript-api
- * 
- * @param transcript - Array of LyricLine objects
- * @returns Array of simplified transcript segments
- */
-export function getTranscript(transcript: LyricLine[]): Array<{ start: number; text: string }> {
-    return transcript.map(line => ({
+export function getTranscript(
+    transcript: LyricLine[],
+): Array<{ start: number; text: string }> {
+    return transcript.map((line) => ({
         start: line.start,
-        text: line.text
+        text: line.text,
     }));
 }
