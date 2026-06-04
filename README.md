@@ -115,7 +115,3 @@ Vite watches for file changes and rebuilds automatically. After each rebuild, go
 No analytics. No tracking. No third-party servers besides LRCLIB and YouTube's own image CDN for thumbnails.
 
 ---
-
-## 📄 License
-
-MIT — use it, fork it, build on it.
