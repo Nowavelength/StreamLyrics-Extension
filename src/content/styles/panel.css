@@ -1096,7 +1096,31 @@
     transform: scale(1.06);
 }
 
+.spotify-pill-refresh-btn {
+    appearance: none;
+    border: none;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.35);
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    width: 16px;
+    height: 16px;
+    transition: color 0.15s ease, transform 0.15s ease;
+}
+
+.spotify-pill-refresh-btn:hover {
+    color: #ffffff;
+    transform: scale(1.1);
+}
+
+.spotify-pill-refresh-btn:active {
+    transform: scale(0.95);
+}
+
 @keyframes fadeIn {
     from { opacity: 0; transform: translateY(4px); }
     to   { opacity: 1; transform: translateY(0);   }
 }
+

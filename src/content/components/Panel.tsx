@@ -826,6 +826,16 @@ export const Panel: React.FC<PanelProps> = ({
                 <div className="spotify-pill-content">
                     <div className="spotify-pill-left">
                         <button className="spotify-close-dot" onClick={handleExpand} title="Expand to Full Lyrics" aria-label="Expand panel" />
+                        {hasMoreResults && (
+                            <button
+                                className="spotify-pill-refresh-btn"
+                                onClick={tryNextResult}
+                                title="Try next lyrics result"
+                                aria-label="Next lyrics result"
+                            >
+                                <RefreshIcon size={11} />
+                            </button>
+                        )}
                         <div className="spotify-pill-grip">
                             <GripGrid2x3 />
                         </div>
