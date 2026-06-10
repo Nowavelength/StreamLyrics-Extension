@@ -152,3 +152,28 @@ export function vibrantize(hex: string, alpha = 0.92): string {
 export function getThumbnailUrl(videoId: string): string {
     return `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
 }
+
+/**
+ * Upgrade a standard/low-res Google User Content or YouTube thumbnail URL 
+ * into a high-resolution version (e.g. w544-h544 or maxresdefault).
+ */
+export function getHighResThumbnailUrl(url: string | null): string | null {
+    if (!url) return null;
+
+    // 1. YouTube Video Thumbnails
+    if (url.includes('img.youtube.com') || url.includes('i.ytimg.com')) {
+        return url.replace(/\/(default|hqdefault|mqdefault|sddefault)\.jpg/, '/maxresdefault.jpg');
+    }
+
+    // 2. Google User Content CDN URLs (YouTube Music Album Art)
+    if (url.includes('googleusercontent.com') || url.includes('ggpht.com')) {
+        let upgraded = url.replace(/=w\d+-h\d+/, '=w544-h544');
+        upgraded = upgraded.replace(/=s\d+/, '=s544');
+        upgraded = upgraded.replace(/\/w\d+-h\d+\//, '/w544-h544/');
+        upgraded = upgraded.replace(/\/s\d+\//, '/s544/');
+        return upgraded;
+    }
+
+    return url;
+}
+

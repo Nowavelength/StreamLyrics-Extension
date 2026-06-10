@@ -23,7 +23,7 @@ import {
     getLyricsSearchTitle,
     getVideoId,
 } from '../utils/transcriptParser';
-import { getThumbnailUrl, vibrantize } from '../utils/colorExtractor';
+import { getThumbnailUrl, getHighResThumbnailUrl, vibrantize } from '../utils/colorExtractor';
 import { AbstractThumbnail } from './AbstractThumbnail';
 import { Settings } from '../hooks/useSettings';
 
@@ -261,6 +261,7 @@ export const Panel: React.FC<PanelProps> = ({
 
     // ---------- Lyrics + audio ------------------------------------------
     const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
+    const [highResThumbnailUrl, setHighResThumbnailUrl] = useState<string | null>(null);
 
     const {
         lines,
@@ -340,29 +341,34 @@ export const Panel: React.FC<PanelProps> = ({
 
     // ---------- Thumbnail discovery -------------------------------------
     const updateThumbnailUrl = useCallback(() => {
+        let normalUrl: string | null = null;
+
         const ytMusicThumb = document.querySelector(
             'ytmusic-player-bar img.image',
         ) as HTMLImageElement | null;
         if (ytMusicThumb?.src) {
-            setThumbnailUrl(ytMusicThumb.src);
-            return;
+            normalUrl = ytMusicThumb.src;
+        } else {
+            const ytMusicArt = document.querySelector(
+                '.ytmusic-player img',
+            ) as HTMLImageElement | null;
+            if (ytMusicArt?.src) {
+                normalUrl = ytMusicArt.src;
+            } else {
+                const videoId = getVideoId();
+                if (videoId) {
+                    normalUrl = getThumbnailUrl(videoId);
+                }
+            }
         }
 
-        const ytMusicArt = document.querySelector(
-            '.ytmusic-player img',
-        ) as HTMLImageElement | null;
-        if (ytMusicArt?.src) {
-            setThumbnailUrl(ytMusicArt.src);
-            return;
+        if (normalUrl) {
+            setThumbnailUrl(normalUrl);
+            setHighResThumbnailUrl(getHighResThumbnailUrl(normalUrl));
+        } else {
+            setThumbnailUrl(null);
+            setHighResThumbnailUrl(null);
         }
-
-        const videoId = getVideoId();
-        if (videoId) {
-            setThumbnailUrl(getThumbnailUrl(videoId));
-            return;
-        }
-
-        setThumbnailUrl(null);
     }, []);
 
     useEffect(() => {
@@ -716,6 +722,7 @@ export const Panel: React.FC<PanelProps> = ({
     if (playerMode === 'mini') {
         const titleText = cleanTrack || currentTitle || 'No title';
         const artistText = cleanArtist || 'Unknown artist';
+        const activeThumbnail = highResThumbnailUrl || thumbnailUrl;
 
         return renderPanel(
             <div
@@ -745,9 +752,9 @@ export const Panel: React.FC<PanelProps> = ({
                         }}
                     />
                     <div className="spotify-artwork-card">
-                        {thumbnailUrl ? (
+                        {activeThumbnail ? (
                             <img
-                                src={thumbnailUrl}
+                                src={activeThumbnail}
                                 alt="Album Art"
                                 className="spotify-album-art"
                                 draggable="false"

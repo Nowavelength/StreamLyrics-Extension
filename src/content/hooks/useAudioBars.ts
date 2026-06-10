@@ -23,6 +23,48 @@ function clamp01(n: number) {
     return Math.max(0, Math.min(1, n));
 }
 
+function findActiveVideo(): HTMLMediaElement | null {
+    const selectors = [
+        'video.html5-main-video',
+        'video.video-stream',
+        '#movie_player video',
+        'ytmusic-player video',
+        '#player video',
+        'video',
+    ];
+    let bestVideo: HTMLMediaElement | null = null;
+    let bestScore = -1;
+
+    for (const selector of selectors) {
+        const elements = Array.from(document.querySelectorAll(selector)) as HTMLMediaElement[];
+        for (const v of elements) {
+            if (!v || !v.src || !v.isConnected) continue;
+
+            let score = 0;
+            score += 1;
+
+            const rect = v.getBoundingClientRect();
+            if (rect.width > 0 && rect.height > 0) {
+                score += 10;
+            }
+
+            if (!v.paused) {
+                score += 20;
+            }
+
+            if (!v.ended && v.currentTime > 0) {
+                score += 5;
+            }
+
+            if (score > bestScore) {
+                bestScore = score;
+                bestVideo = v;
+            }
+        }
+    }
+    return bestVideo;
+}
+
 export function useAudioBars(barCount = 32) {
     const [bars, setBars] = useState<number[]>(
         Array.from({ length: barCount }, () => 0.05),
@@ -30,6 +72,7 @@ export function useAudioBars(barCount = 32) {
     const barsRef = useRef<number[]>(
         Array.from({ length: barCount }, () => 0.05),
     );
+    const isProceduralRef = useRef(false);
 
     useEffect(() => {
         let rafId = 0;
@@ -41,9 +84,7 @@ export function useAudioBars(barCount = 32) {
         let cleanupListener: (() => void) | null = null;
 
         const init = () => {
-            mediaEl = document.querySelector(
-                'video.html5-main-video, video',
-            ) as HTMLMediaElement | null;
+            mediaEl = findActiveVideo();
 
             if (!mediaEl) {
                 if (isActive) rafId = requestAnimationFrame(init);
@@ -68,21 +109,26 @@ export function useAudioBars(barCount = 32) {
                         analyser: newAnalyser,
                         source,
                     });
+                    isProceduralRef.current = false;
                 } catch (e) {
                     console.warn(
-                        '[StreamLyrics] Audio graph could not be created (falling back to procedural):',
+                        '[StreamLyrics] Audio graph could not be created; falling back to procedural waves:',
                         e,
                     );
-                    return;
+                    isProceduralRef.current = true;
                 }
             }
 
-            const cached = audioGraphCache.get(mediaEl)!;
-            analyser = cached.analyser;
-            data = new Uint8Array(analyser.frequencyBinCount);
+            const cached = audioGraphCache.get(mediaEl);
+            if (cached) {
+                analyser = cached.analyser;
+                data = new Uint8Array(analyser.frequencyBinCount);
+            } else {
+                isProceduralRef.current = true;
+            }
 
             const tick = (now: number) => {
-                if (!isActive || !analyser || !data || !mediaEl) return;
+                if (!isActive || !mediaEl) return;
 
                 // FPS gate.
                 if (now - lastFrame < FRAME_BUDGET_MS) {
@@ -92,7 +138,7 @@ export function useAudioBars(barCount = 32) {
                 lastFrame = now;
 
                 // Auto-resume if browser suspended the context.
-                if (cached.audioCtx.state === 'suspended' && !mediaEl.paused) {
+                if (cached && cached.audioCtx.state === 'suspended' && !mediaEl.paused) {
                     cached.audioCtx.resume().catch(() => {});
                 }
 
@@ -109,45 +155,73 @@ export function useAudioBars(barCount = 32) {
                     return;
                 }
 
-                analyser.getByteFrequencyData(data as any);
-                const usefulBins = Math.floor(data.length * 0.6);
+                if (isProceduralRef.current || !analyser || !data) {
+                    // --- Procedural Fallback Mode ---
+                    // Generates smooth, beautiful mirrored mock waves (bass center, treble edge)
+                    const timeFactor = performance.now() * 0.0035;
+                    const next = Array.from({ length: barCount }, (_, i) => {
+                        const half = barCount / 2;
+                        const centerDist =
+                            i < half
+                                ? (half - 1 - i) / (half - 1)
+                                : (i - half) / (half - 1);
 
-                const next = Array.from({ length: barCount }, (_, i) => {
-                    const half = barCount / 2;
-                    const centerDist =
-                        i < half
-                            ? (half - 1 - i) / (half - 1)
-                            : (i - half) / (half - 1);
+                        // Mirrored sine wave combination with slight dynamic noise
+                        const wave1 = Math.sin(timeFactor + i * 0.22) * 0.35 + 0.35;
+                        const wave2 = Math.cos(timeFactor * 0.73 - i * 0.38) * 0.2 + 0.2;
+                        const noise = Math.random() * 0.06;
 
-                    const binIndex = Math.floor(
-                        Math.pow(centerDist, 1.5) * usefulBins,
+                        // Taper heights down toward the treble edges
+                        const raw = (wave1 + wave2 + noise) * (1.1 - centerDist * 0.65);
+                        return 0.05 + clamp01(raw) * 0.95;
+                    });
+
+                    barsRef.current = barsRef.current.map(
+                        (prev, i) => prev * 0.65 + next[i] * 0.35,
                     );
-                    const windowSize = Math.max(
-                        1,
-                        Math.floor(centerDist * 3),
-                    );
+                    setBars([...barsRef.current]);
+                } else {
+                    // --- Standard Web Audio API Mode ---
+                    analyser.getByteFrequencyData(data as any);
+                    const usefulBins = Math.floor(data.length * 0.6);
 
-                    let sum = 0;
-                    let count = 0;
-                    const start = Math.max(0, binIndex - windowSize);
-                    const end = Math.min(
-                        data!.length - 1,
-                        binIndex + windowSize,
-                    );
-                    for (let j = start; j <= end; j++) {
-                        sum += data![j];
-                        count++;
-                    }
-                    const avg = count ? sum / count : 0;
-                    const eqBoost = 1 + centerDist * 0.8;
-                    const raw = (avg / 255) * eqBoost;
-                    return 0.05 + clamp01(raw) * 0.95;
-                });
+                    const next = Array.from({ length: barCount }, (_, i) => {
+                        const half = barCount / 2;
+                        const centerDist =
+                            i < half
+                                ? (half - 1 - i) / (half - 1)
+                                : (i - half) / (half - 1);
 
-                barsRef.current = barsRef.current.map(
-                    (prev, i) => prev * 0.7 + next[i] * 0.3,
-                );
-                setBars([...barsRef.current]);
+                        const binIndex = Math.floor(
+                            Math.pow(centerDist, 1.5) * usefulBins,
+                        );
+                        const windowSize = Math.max(
+                            1,
+                            Math.floor(centerDist * 3),
+                        );
+
+                        let sum = 0;
+                        let count = 0;
+                        const start = Math.max(0, binIndex - windowSize);
+                        const end = Math.min(
+                            data!.length - 1,
+                            binIndex + windowSize,
+                        );
+                        for (let j = start; j <= end; j++) {
+                            sum += data![j];
+                            count++;
+                        }
+                        const avg = count ? sum / count : 0;
+                        const eqBoost = 1 + centerDist * 0.8;
+                        const raw = (avg / 255) * eqBoost;
+                        return 0.05 + clamp01(raw) * 0.95;
+                    });
+
+                    barsRef.current = barsRef.current.map(
+                        (prev, i) => prev * 0.7 + next[i] * 0.3,
+                    );
+                    setBars([...barsRef.current]);
+                }
 
                 rafId = requestAnimationFrame(tick);
             };
@@ -156,7 +230,7 @@ export function useAudioBars(barCount = 32) {
 
             // Wake the loop when the user resumes playback.
             const handlePlay = () => {
-                if (cached.audioCtx.state === 'suspended') {
+                if (cached && cached.audioCtx.state === 'suspended') {
                     cached.audioCtx.resume().catch(() => {});
                 }
                 cancelAnimationFrame(rafId);
@@ -167,12 +241,23 @@ export function useAudioBars(barCount = 32) {
                 mediaEl?.removeEventListener('play', handlePlay);
         };
 
+        const checkVideoChange = () => {
+            const currentVideo = findActiveVideo();
+            if (currentVideo && currentVideo !== mediaEl) {
+                cancelAnimationFrame(rafId);
+                cleanupListener?.();
+                init();
+            }
+        };
+        const intervalId = setInterval(checkVideoChange, 2500);
+
         init();
 
         return () => {
             isActive = false;
             cancelAnimationFrame(rafId);
             cleanupListener?.();
+            clearInterval(intervalId);
             // Note: we deliberately do NOT close the AudioContext or
             // disconnect the graph. It belongs to the DOM node now.
         };

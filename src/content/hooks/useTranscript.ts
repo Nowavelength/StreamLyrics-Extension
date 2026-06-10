@@ -33,6 +33,53 @@ const VIDEO_REATTACH_INTERVAL_MS = 4_000;
  *   - Manual search override
  *   - LRCLIB alternates / next result cycling
  */
+function findActiveVideo(): HTMLVideoElement | null {
+    const selectors = [
+        'video.html5-main-video',
+        'video.video-stream',
+        '#movie_player video',
+        'ytmusic-player video',
+        '#player video',
+        'video',
+    ];
+    let bestVideo: HTMLVideoElement | null = null;
+    let bestScore = -10000;
+
+    for (const selector of selectors) {
+        const elements = Array.from(document.querySelectorAll(selector)) as HTMLVideoElement[];
+        for (const v of elements) {
+            if (!v || !v.src || !v.isConnected) continue;
+
+            let score = 0;
+            score += 1;
+
+            const rect = v.getBoundingClientRect();
+            if (rect.width > 0 && rect.height > 0) {
+                score += 10;
+            }
+
+            if (!v.paused) {
+                score += 100;
+            }
+
+            const isEnded = v.ended || (v.duration > 0 && v.currentTime >= v.duration - 0.5);
+            if (isEnded) {
+                score -= 1000;
+            }
+
+            if (v.closest('ytmusic-player') || v.closest('#movie_player') || v.closest('.html5-video-player')) {
+                score += 50;
+            }
+
+            if (score > bestScore) {
+                bestScore = score;
+                bestVideo = v;
+            }
+        }
+    }
+    return bestVideo;
+}
+
 export function useTranscript(): UseTranscriptResult {
     const [lines, setLines] = useState<LyricLine[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -49,7 +96,9 @@ export function useTranscript(): UseTranscriptResult {
     const fetchIdRef = useRef(0);
     const lastFetchedSignatureRef = useRef('');
     const lastSeenSignatureRef = useRef('');
+    const lastFetchedVideoSrcRef = useRef('');
     const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const signatureFirstSeenRef = useRef<{ signature: string; timestamp: number } | null>(null);
 
     useEffect(() => {
         linesRef.current = lines;
@@ -113,6 +162,11 @@ export function useTranscript(): UseTranscriptResult {
             fetchIdRef.current = fetchId;
             lastFetchedSignatureRef.current = signature;
             lastSeenSignatureRef.current = signature;
+
+            const video = findActiveVideo();
+            if (video) {
+                lastFetchedVideoSrcRef.current = video.src;
+            }
 
             setCurrentTitle(
                 trackInfo.artist
@@ -204,11 +258,46 @@ export function useTranscript(): UseTranscriptResult {
             if (!lastSeenSignatureRef.current) {
                 lastSeenSignatureRef.current = signature;
             }
-            // If we never managed an initial fetch (e.g. metadata wasn't
-            // available at mount time), kick one off the moment we see a real
-            // signature. Don't wait for the debounce.
             if (!lastFetchedSignatureRef.current) {
                 fetchLyrics(true);
+                return;
+            }
+
+            // Track when we first see a new signature to prevent getting permanently stuck
+            // in the transition gate if DOM changes late or video.src is a recycled blob URL.
+            if (signature !== lastFetchedSignatureRef.current) {
+                if (
+                    !signatureFirstSeenRef.current ||
+                    signatureFirstSeenRef.current.signature !== signature
+                ) {
+                    signatureFirstSeenRef.current = {
+                        signature,
+                        timestamp: Date.now(),
+                    };
+                }
+            } else {
+                signatureFirstSeenRef.current = null;
+            }
+
+            const timeSinceSignatureChange = signatureFirstSeenRef.current
+                ? Date.now() - signatureFirstSeenRef.current.timestamp
+                : 0;
+
+            // Gating: If the signature changed, but the video is still playing the old source
+            // and hasn't reset to the beginning of a new track yet, don't switch lyrics yet.
+            // We enforce a 2-second timeout to handle cases where video.src never changes
+            // (e.g. recycled MSE blob URL) or the DOM updates late.
+            const video = findActiveVideo();
+            if (
+                video &&
+                lastFetchedVideoSrcRef.current &&
+                video.src === lastFetchedVideoSrcRef.current &&
+                video.currentTime > 3.0 &&
+                !video.paused &&
+                signature !== lastFetchedSignatureRef.current &&
+                timeSinceSignatureChange < 2000
+            ) {
+                console.log('[StreamLyrics] Song change detected early, waiting for video transition...');
                 return;
             }
             if (
@@ -323,7 +412,7 @@ export function useTranscript(): UseTranscriptResult {
         let detachVideo = () => {};
 
         const attachToCurrentVideo = () => {
-            const video = document.querySelector('video') as HTMLVideoElement | null;
+            const video = findActiveVideo();
             if (!video || video === attachedVideo) return;
             detachVideo();
             attachedVideo = video;

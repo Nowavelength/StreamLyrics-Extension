@@ -22,9 +22,33 @@ export interface SavedLyrics {
  * Sanitize artist and title for storage key
  */
 function getStorageKey(artist: string, title: string): string {
-    const safeArtist = artist.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const safeTitle = title.toLowerCase().replace(/[^a-z0-9]/g, '');
-    return `${STORAGE_PREFIX}${safeArtist}_${safeTitle}`;
+    const rawArtist = artist.trim().toLowerCase();
+    const rawTitle = title.trim().toLowerCase();
+
+    // 1. Generate old-style key for backwards compatibility
+    const oldArtist = rawArtist.replace(/[^a-z0-9]/g, '');
+    const oldTitle = rawTitle.replace(/[^a-z0-9]/g, '');
+    
+    // If it's a standard Latin-only track, use the old key format so 
+    // existing user cache is fully preserved.
+    if (oldArtist.length > 0 && oldTitle.length > 0) {
+        return `${STORAGE_PREFIX}${oldArtist}_${oldTitle}`;
+    }
+
+    // 2. For international scripts, generate a unique, safe key using URL encoding
+    // combined with a stable FNV-1a hash for absolute collision resistance.
+    const safeArtist = encodeURIComponent(rawArtist).replace(/%/g, '_').substring(0, 20);
+    const safeTitle = encodeURIComponent(rawTitle).replace(/%/g, '_').substring(0, 20);
+    
+    const hashInput = `${rawArtist}|${rawTitle}`;
+    let hash = 2166136261;
+    for (let i = 0; i < hashInput.length; i++) {
+        hash ^= hashInput.charCodeAt(i);
+        hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+    }
+    const suffix = (hash >>> 0).toString(16).padStart(8, '0');
+
+    return `${STORAGE_PREFIX}i18n_${safeArtist}_${safeTitle}_${suffix}`;
 }
 
 export const storageService = {

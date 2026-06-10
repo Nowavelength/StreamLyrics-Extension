@@ -29,6 +29,7 @@ export function useVideoSync(
     const [isPaused, setIsPaused] = useState(true);
     const [currentTime, setCurrentTime] = useState(0);
     const [offset, setOffsetState] = useState(initialOffset);
+    const [activeVideo, setActiveVideo] = useState<HTMLVideoElement | null>(null);
 
     const offsetRef = useRef(initialOffset);
     const linesRef = useRef<LyricLine[]>(lines);
@@ -36,6 +37,8 @@ export function useVideoSync(
     const rafIdRef = useRef<number | null>(null);
     const lastLineIndexRef = useRef(-1);
     const lastTimeUpdateRef = useRef(0);
+    const trackStartOffsetRef = useRef(0);
+    const lastDomTimeRef = useRef(-1);
 
     useEffect(() => {
         offsetRef.current = initialOffset;
@@ -72,20 +75,32 @@ export function useVideoSync(
             const time = video.currentTime;
             const now = performance.now();
 
+            // Continuous self-correcting calibration against the DOM player progress
+            const domTime = getDomTrackTime();
+            if (domTime !== null) {
+                if (domTime !== lastDomTimeRef.current) {
+                    trackStartOffsetRef.current = time - domTime;
+                    lastDomTimeRef.current = domTime;
+                }
+            } else {
+                trackStartOffsetRef.current = 0;
+                lastDomTimeRef.current = -1;
+            }
+
+            const trackTime = Math.max(0, time - trackStartOffsetRef.current);
+
             // Throttle currentTime + isPaused to 10 fps so the React tree
             // doesn't churn.
             if (now - lastTimeUpdateRef.current >= TIME_UPDATE_INTERVAL_MS) {
                 lastTimeUpdateRef.current = now;
-                setCurrentTime(time);
+                setCurrentTime(trackTime);
                 setIsPaused(video.paused);
             }
 
-            if (!video.paused) {
-                const newIndex = findCurrentLineIndex(time);
-                if (newIndex !== lastLineIndexRef.current) {
-                    lastLineIndexRef.current = newIndex;
-                    setCurrentLineIndex(newIndex);
-                }
+            const newIndex = findCurrentLineIndex(trackTime);
+            if (newIndex !== lastLineIndexRef.current) {
+                lastLineIndexRef.current = newIndex;
+                setCurrentLineIndex(newIndex);
             }
         }
         rafIdRef.current = requestAnimationFrame(syncLoop);
@@ -121,9 +136,9 @@ export function useVideoSync(
         setCurrentLineIndex(index);
     }, []);
 
-    // Find video element (with retry via observer).
+    // Track active video element (re-evaluate periodically in case YouTube swaps it).
     useEffect(() => {
-        const findVideo = (): boolean => {
+        const findVideo = () => {
             const selectors = [
                 'video.html5-main-video',
                 'video.video-stream',
@@ -132,29 +147,68 @@ export function useVideoSync(
                 '#player video',
                 'video',
             ];
+            let bestVideo: HTMLVideoElement | null = null;
+            let bestScore = -10000;
+
             for (const selector of selectors) {
-                const v = document.querySelector(selector) as HTMLVideoElement | null;
-                if (v && v.src) {
-                    videoRef.current = v;
-                    return true;
+                const elements = Array.from(document.querySelectorAll(selector)) as HTMLVideoElement[];
+                for (const v of elements) {
+                    if (!v || !v.src || !v.isConnected) continue;
+
+                    let score = 0;
+                    score += 1;
+
+                    const rect = v.getBoundingClientRect();
+                    if (rect.width > 0 && rect.height > 0) {
+                        score += 10;
+                    }
+
+                    if (!v.paused) {
+                        score += 100;
+                    }
+
+                    const isEnded = v.ended || (v.duration > 0 && v.currentTime >= v.duration - 0.5);
+                    if (isEnded) {
+                        score -= 1000;
+                    }
+
+                    if (v.closest('ytmusic-player') || v.closest('#movie_player') || v.closest('.html5-video-player')) {
+                        score += 50;
+                    }
+
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestVideo = v;
+                    }
                 }
             }
-            return false;
+
+            if (bestVideo && bestVideo !== videoRef.current) {
+                videoRef.current = bestVideo;
+                setActiveVideo(bestVideo);
+            }
         };
 
-        if (!findVideo()) {
-            const observer = new MutationObserver(() => {
-                if (findVideo()) observer.disconnect();
-            });
-            observer.observe(document.body, { childList: true, subtree: true });
-            return () => observer.disconnect();
-        }
+        findVideo();
+        const interval = setInterval(findVideo, 1000); // Check every 1s for snappy tab updates
+
+        const observer = new MutationObserver(() => {
+            findVideo();
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+
+        return () => {
+            clearInterval(interval);
+            observer.disconnect();
+        };
     }, []);
 
     // RAF loop lifecycle.
     useEffect(() => {
         lastLineIndexRef.current = -1;
         setCurrentLineIndex(-1);
+        trackStartOffsetRef.current = 0;
+        lastDomTimeRef.current = -1;
 
         if (lines.length > 0) {
             rafIdRef.current = requestAnimationFrame(syncLoop);
@@ -167,16 +221,22 @@ export function useVideoSync(
     // Video pause/play/seeked event handlers — keep state in sync immediately
     // (don't wait for the throttled RAF tick).
     useEffect(() => {
-        const video = videoRef.current;
+        const video = activeVideo;
         if (!video) return;
 
         const handlePause = () => setIsPaused(true);
         const handlePlay = () => setIsPaused(false);
         const handleSeeked = () => {
-            const newIndex = findCurrentLineIndex(video.currentTime);
+            const domTime = getDomTrackTime() || 0;
+            const time = video.currentTime;
+            trackStartOffsetRef.current = time - domTime;
+            lastDomTimeRef.current = domTime;
+
+            const trackTime = Math.max(0, time - trackStartOffsetRef.current);
+            const newIndex = findCurrentLineIndex(trackTime);
             lastLineIndexRef.current = newIndex;
             setCurrentLineIndex(newIndex);
-            setCurrentTime(video.currentTime);
+            setCurrentTime(trackTime);
         };
 
         video.addEventListener('pause', handlePause);
@@ -188,7 +248,7 @@ export function useVideoSync(
             video.removeEventListener('play', handlePlay);
             video.removeEventListener('seeked', handleSeeked);
         };
-    }, [findCurrentLineIndex]);
+    }, [activeVideo, findCurrentLineIndex]);
 
     return {
         currentLineIndex,
@@ -208,4 +268,50 @@ function clamp(v: number, min: number, max: number) {
 }
 function roundTo1(v: number) {
     return Math.round(v * 10) / 10;
+}
+
+function parseTimeToSeconds(timeStr: string): number {
+    const cleanStr = timeStr.replace(/[^\d:]/g, '').trim();
+    const parts = cleanStr.split(':').map(Number);
+    if (parts.some(isNaN) || parts.length === 0) return 0;
+    if (parts.length === 3) {
+        return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    } else if (parts.length === 2) {
+        return parts[0] * 60 + parts[1];
+    }
+    return parts[0] || 0;
+}
+
+function getDomTrackTime(): number | null {
+    // YouTube Music selectors
+    const ytmSelectors = [
+        'ytmusic-player-bar .time-info',
+        'ytmusic-player-bar #time-display',
+        '.time-info.ytmusic-player-bar',
+    ];
+    for (const selector of ytmSelectors) {
+        const el = document.querySelector(selector);
+        const text = el?.textContent?.trim();
+        if (text && text.includes('/')) {
+            const currentPart = text.split('/')[0];
+            if (currentPart) {
+                return parseTimeToSeconds(currentPart);
+            }
+        }
+    }
+
+    // YouTube selectors
+    const ytSelectors = [
+        '.ytp-time-current',
+        '.ytp-time-display .ytp-time-current',
+    ];
+    for (const selector of ytSelectors) {
+        const el = document.querySelector(selector);
+        const text = el?.textContent?.trim();
+        if (text) {
+            return parseTimeToSeconds(text);
+        }
+    }
+
+    return null;
 }
