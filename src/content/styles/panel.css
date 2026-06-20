@@ -1,13 +1,13 @@
 /* =========================================================================
    StreamLyrics — All shadow-DOM styles
-   System font stack (no Google Fonts) for offline / privacy / consent reasons.
+   Locally bundled Manrope with system fallbacks; no remote font requests.
    ========================================================================= */
 
 :host,
 .streamlyrics-panel,
 .streamlyrics-mount {
     --lyric-font-size: 32px;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
         'Helvetica Neue', Arial, 'Inter', sans-serif;
 }
 
@@ -1123,4 +1123,3 @@
     from { opacity: 0; transform: translateY(4px); }
     to   { opacity: 1; transform: translateY(0);   }
 }
-

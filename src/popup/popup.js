@@ -1,3 +1,9 @@
+import { MANROPE_FONT_FACE } from '../shared/manropeFont';
+
+const fontStyle = document.createElement('style');
+fontStyle.textContent = MANROPE_FONT_FACE;
+document.head.appendChild(fontStyle);
+
 // Default settings - kept in sync with src/background/service-worker.ts
 const DEFAULT_SETTINGS = {
     enabled: true,
