@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Panel } from './components/Panel';
 import { useSettings } from './hooks/useSettings';
+import { loadManropeFont } from '../shared/manropeFont';
 
 /**
  * Error boundary so a crash inside Panel/hooks doesn't leave a blank shadow
@@ -99,7 +100,7 @@ export const App: React.FC<AppProps> = ({ styles, initialVisible = false }) => {
     const openPipWindow = useCallback(async () => {
         if (!('documentPictureInPicture' in window)) {
             alert(
-                'Picture-in-Picture is not supported in this browser. Please use Chrome 116+',
+                'Always-on-top Picture-in-Picture is not supported in this browser. Please use Chrome 116+.',
             );
             return;
         }
@@ -110,6 +111,7 @@ export const App: React.FC<AppProps> = ({ styles, initialVisible = false }) => {
                 height: 600,
             });
 
+            await loadManropeFont(pipWin.document);
             setPipWindow(pipWin);
 
             const { documentElement, body, head } = pipWin.document;
@@ -145,7 +147,10 @@ export const App: React.FC<AppProps> = ({ styles, initialVisible = false }) => {
                 head.appendChild(styleEl);
             }
         } catch (error) {
-            console.error('[StreamLyrics] Failed to open PIP window:', error);
+            console.error('[StreamLyrics] Failed to open always-on-top PiP window:', error);
+            alert(
+                'Could not open the always-on-top Picture-in-Picture window. Please try again from an active Chrome tab.',
+            );
         }
     }, [styles]);
 

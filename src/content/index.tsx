@@ -1,9 +1,7 @@
 import { createRoot, Root } from 'react-dom/client';
 import { App } from './App';
 import panelStyles from './styles/panel.css?inline';
-import { withManropeFontFace } from '../shared/manropeFont';
-
-const streamLyricsStyles = withManropeFontFace(panelStyles);
+import { loadManropeFont } from '../shared/manropeFont';
 
 /**
  * StreamLyrics content script entry point.
@@ -61,6 +59,8 @@ function waitForPlayer(initialVisible: boolean, startedAt: number) {
 function injectApp(initialVisible: boolean) {
     if (document.getElementById(CONTAINER_ID)) return;
 
+    void loadManropeFont(document);
+
     const host = document.createElement('div');
     host.id = CONTAINER_ID;
     document.body.appendChild(host);
@@ -68,7 +68,7 @@ function injectApp(initialVisible: boolean) {
     const shadow = host.attachShadow({ mode: 'open' });
 
     const style = document.createElement('style');
-    style.textContent = streamLyricsStyles;
+    style.textContent = panelStyles;
     shadow.appendChild(style);
 
     const mountPoint = document.createElement('div');
@@ -77,7 +77,7 @@ function injectApp(initialVisible: boolean) {
 
     reactRoot = createRoot(mountPoint);
     reactRoot.render(
-        <App styles={streamLyricsStyles} initialVisible={initialVisible} />,
+        <App styles={panelStyles} initialVisible={initialVisible} />,
     );
     console.log('[StreamLyrics] Injected successfully.');
 }

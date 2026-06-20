@@ -12,8 +12,9 @@ await access(path.join(root, 'THIRD_PARTY_LICENSES/Manrope-OFL.txt'));
 
 const sharedFont = await read('src/shared/manropeFont.ts');
 requireText(sharedFont, /Manrope-Variable\.woff2['"]/, 'Manrope WOFF2 import');
-requireText(sharedFont, /font-family:\s*['"]Manrope['"]/, 'Manrope @font-face family');
-requireText(sharedFont, /font-weight:\s*200 800/, 'Manrope variable weight range');
+requireText(sharedFont, /new FontFaceConstructor\(/, 'target-document FontFace construction');
+requireText(sharedFont, /targetDocument\.fonts\.add\(/, 'document FontFace registration');
+requireText(sharedFont, /WeakMap<Document,\s*Promise<void>>/, 'per-document font loading cache');
 
 const panelCss = await read('src/content/styles/panel.css');
 const popupCss = await read('src/popup/popup.css');
@@ -22,8 +23,14 @@ requireText(popupCss, /font-family:\s*['"]Manrope['"]\s*,/, 'Manrope-first popup
 
 const contentEntry = await read('src/content/index.tsx');
 const popupEntry = await read('src/popup/popup.js');
-requireText(contentEntry, /withManropeFontFace\(panelStyles\)/, 'content font-face injection');
-requireText(popupEntry, /MANROPE_FONT_FACE/, 'popup font-face injection');
+const appEntry = await read('src/content/App.tsx');
+requireText(contentEntry, /loadManropeFont\(document\)/, 'owner document font loading');
+requireText(popupEntry, /loadManropeFont\(document\)/, 'options document font loading');
+requireText(appEntry, /loadManropeFont\(pipWin\.document\)/, 'PiP document font loading');
+requireText(appEntry, /documentPictureInPicture\.requestWindow/, 'native Document PiP request');
+if (/window\.open\s*\(/.test(appEntry)) {
+    throw new Error('Normal popup fallback must not be used for always-on-top PiP');
+}
 
 const dist = path.join(root, 'dist');
 await access(dist);

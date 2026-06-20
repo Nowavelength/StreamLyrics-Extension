@@ -359,8 +359,9 @@ play wake mediaSession metadata navigator media session.
 
 ## Don'ts
 
-- Don't add Google Fonts or any third-party font CDN. The system font stack
-  in `panel.css` is intentional (privacy + offline).
+- Don't add Google Fonts or any third-party font CDN. Manrope is bundled
+  locally and registered per document through `src/shared/manropeFont.ts`;
+  the system stack in `panel.css` is the offline fallback.
 - Don't add new `host_permissions` without updating `README.md`.
 - Don't write to `chrome.storage.sync` from anywhere other than the popup or
   the service worker's onInstalled (sync has tight quotas; the panel itself
