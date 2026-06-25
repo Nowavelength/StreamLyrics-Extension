@@ -1,6 +1,6 @@
-import { loadGothamFont } from '../shared/gothamFont';
+import { loadAppFonts } from '../shared/appFonts';
 
-void loadGothamFont(document);
+void loadAppFonts(document);
 
 // Default settings - kept in sync with src/background/service-worker.ts
 const DEFAULT_SETTINGS = {

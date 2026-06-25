@@ -93,6 +93,8 @@ export const AbstractThumbnail: React.FC<AbstractThumbnailProps> = ({
                 background: 'rgba(0, 0, 0, 0.25)',
                 boxShadow: 'inset 0 0 8px rgba(255,255,255,0.04)',
                 display: 'block',
+                width: '100%',
+                height: '100%',
             }}
         />
     );

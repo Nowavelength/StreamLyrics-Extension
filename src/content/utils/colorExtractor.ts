@@ -1,5 +1,9 @@
 // @ts-ignore — colorthief has no types
-import ColorThief from 'colorthief';
+import ColorThiefImport from 'colorthief';
+
+// colorthief ships both node and browser builds; the resolved typings aren't
+// constructable under our tsconfig, so treat the default export as a ctor.
+const ColorThief: any = ColorThiefImport;
 
 interface RGB {
     r: number;
@@ -37,6 +41,82 @@ export async function extractDominantColor(imageUrl: string): Promise<string> {
         console.warn('[StreamLyrics] Color extraction failed, using fallback:', err);
         return FALLBACK_HEX;
     }
+}
+
+/**
+ * Theme colors derived from a single thumbnail.
+ *   - `dominant`: the readability-adjusted dominant color (Normal-mode bg).
+ *   - `dark`:     a deep, dark shade pulled from the palette (Mini-mode bg).
+ *                 Falls back to near-black when the art has no dark tones.
+ */
+export interface ThemeColors {
+    dominant: string;
+    dark: string;
+}
+
+const NEAR_BLACK = '#0a0a0a';
+const themeCache = new Map<string, ThemeColors>();
+
+function luminance({ r, g, b }: RGB): number {
+    return (r * 299 + g * 587 + b * 114) / 1000;
+}
+
+/**
+ * Extract both the dominant color and a dark background color from one image.
+ * The dark color is the lowest-luminance palette swatch, then clamped down so
+ * it always reads as a proper dark surface. Result cached per URL.
+ */
+export async function extractThemeColors(imageUrl: string): Promise<ThemeColors> {
+    if (themeCache.has(imageUrl)) return themeCache.get(imageUrl)!;
+
+    try {
+        const img = await loadImage(imageUrl);
+        const thief = new ColorThief();
+
+        const dominantRgb: [number, number, number] = thief.getColor(img);
+        const dominant = rgbToHex(
+            adjustForReadability({ r: dominantRgb[0], g: dominantRgb[1], b: dominantRgb[2] }),
+        );
+
+        let dark = NEAR_BLACK;
+        try {
+            const palette: [number, number, number][] = thief.getPalette(img, 8) || [];
+            const swatches = palette.map(([r, g, b]) => ({ r, g, b }));
+            // Include the dominant in the candidate set.
+            swatches.push({ r: dominantRgb[0], g: dominantRgb[1], b: dominantRgb[2] });
+            if (swatches.length) {
+                const darkest = swatches.reduce((a, b) =>
+                    luminance(a) <= luminance(b) ? a : b,
+                );
+                // Clamp the darkest swatch toward a deep surface (L <= ~16%)
+                // while keeping its hue, so it harmonizes with the artwork.
+                const [h, s] = rgbToHsl(darkest.r, darkest.g, darkest.b);
+                const targetL = Math.min(13, luminance(darkest) / 255 * 100);
+                dark = rgbToHex(hslToRgb(h, Math.min(s, 45), Math.max(6, targetL)));
+            }
+        } catch {
+            dark = NEAR_BLACK;
+        }
+
+        const colors: ThemeColors = { dominant, dark };
+        themeCache.set(imageUrl, colors);
+        return colors;
+    } catch (err) {
+        console.warn('[StreamLyrics] Theme extraction failed, using fallback:', err);
+        return { dominant: FALLBACK_HEX, dark: NEAR_BLACK };
+    }
+}
+
+/** Multiply a hex color toward black by `factor` (0 = unchanged, 1 = black). */
+export function darken(hex: string, factor = 0.4): string {
+    const rgb = hexToRgbObj(hex);
+    if (!rgb) return hex;
+    const f = Math.max(0, Math.min(1, factor));
+    return rgbToHex({
+        r: Math.round(rgb.r * (1 - f)),
+        g: Math.round(rgb.g * (1 - f)),
+        b: Math.round(rgb.b * (1 - f)),
+    });
 }
 
 function loadImage(url: string): Promise<HTMLImageElement> {

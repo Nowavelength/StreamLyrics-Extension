@@ -5,6 +5,7 @@ interface UseVideoSyncResult {
     currentLineIndex: number;
     isPaused: boolean;
     currentTime: number;
+    duration: number;
     offset: number;
     seekTo: (time: number) => void;
     adjustOffset: (delta: number) => void;
@@ -28,6 +29,7 @@ export function useVideoSync(
     const [currentLineIndex, setCurrentLineIndex] = useState(-1);
     const [isPaused, setIsPaused] = useState(true);
     const [currentTime, setCurrentTime] = useState(0);
+    const [duration, setDuration] = useState(0);
     const [offset, setOffsetState] = useState(initialOffset);
     const [activeVideo, setActiveVideo] = useState<HTMLVideoElement | null>(null);
 
@@ -94,6 +96,7 @@ export function useVideoSync(
             if (now - lastTimeUpdateRef.current >= TIME_UPDATE_INTERVAL_MS) {
                 lastTimeUpdateRef.current = now;
                 setCurrentTime(trackTime);
+                setDuration(Number.isFinite(video.duration) ? video.duration : 0);
                 setIsPaused(video.paused);
             }
 
@@ -254,6 +257,7 @@ export function useVideoSync(
         currentLineIndex,
         isPaused,
         currentTime,
+        duration,
         offset,
         seekTo,
         adjustOffset,

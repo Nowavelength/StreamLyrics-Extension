@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Panel } from './components/Panel';
 import { useSettings } from './hooks/useSettings';
-import { loadGothamFont } from '../shared/gothamFont';
+import { loadAppFonts } from '../shared/appFonts';
 
 /**
  * Error boundary so a crash inside Panel/hooks doesn't leave a blank shadow
@@ -111,7 +111,7 @@ export const App: React.FC<AppProps> = ({ styles, initialVisible = false }) => {
                 height: 600,
             });
 
-            await loadGothamFont(pipWin.document);
+            await loadAppFonts(pipWin.document);
             setPipWindow(pipWin);
 
             const { documentElement, body, head } = pipWin.document;

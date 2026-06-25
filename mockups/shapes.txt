@@ -1,0 +1,100 @@
+===== Mini player.svg =====
+<rect width="428" height="292" rx="20" fill="black"/
+<rect x="375.557" y="115.722" width="41.8228" height="41.8228" fill="url(#pattern0_5_163)"/
+<rect x="347.924" y="118.709" width="35.8482" height="35.8482" fill="url(#pattern1_5_163)"/
+<circle cx="314.69" cy="136.26" r="27.2595" fill="white"/
+<rect width="41.8228" height="41.8228" transform="matrix(-1 0 0 1 253.823 118.709)" fill="url(#pattern2_5_163)"/
+<rect width="35.8482" height="35.8482" transform="matrix(-1 0 0 1 281.456 121.696)" fill="url(#pattern3_5_163)"/
+<rect x="22" y="20" width="152" height="139" rx="10" fill="#215756"/
+<rect x="323" y="187" width="95" height="95" rx="10" fill="#020202"/
+
+===== Mini's mini player.svg =====
+<rect width="234" height="292" rx="20" fill="black"/
+<rect x="12.028" y="47" width="89" height="89" rx="10" fill="#215756"/
+<rect x="179.311" y="103.7" width="28.0812" height="28.0812" fill="url(#pattern0_6_207)"/
+<rect width="28.0812" height="28.0812" transform="matrix(-1 0 0 1 141.081 104)" fill="url(#pattern1_6_207)"/
+<circle cx="160.303" cy="117.303" r="18.3029" fill="white"/
+
+===== Normal.svg =====
+<rect width="587" height="654" rx="20" fill="#215756"/
+<rect x="186" y="620" width="214" height="30" rx="15" fill="white" fill-opacity="0.1"/
+<rect x="22" y="20" width="30" height="30" rx="5" fill="#B6B6B6" fill-opacity="0.2"/
+<rect x="22.5" y="20.5" width="29" height="29" rx="4.5" stroke="white" stroke-opacity="0.6"/
+<rect x="58" y="20" width="30" height="30" rx="5" fill="#B6B6B6" fill-opacity="0.2"/
+<rect x="58.5" y="20.5" width="29" height="29" rx="4.5" stroke="white" stroke-opacity="0.6"/
+<rect x="498" y="20" width="30" height="30" rx="5" fill="#B6B6B6" fill-opacity="0.2"/
+<rect x="498.5" y="20.5" width="29" height="29" rx="4.5" stroke="white" stroke-opacity="0.6"/
+<rect x="534" y="20" width="30" height="30" rx="5" fill="#B6B6B6" fill-opacity="0.2"/
+<rect x="534.5" y="20.5" width="29" height="29" rx="4.5" stroke="white" stroke-opacity="0.6"/
+<circle cx="554" cy="621" r="20" fill="#D9D9D9"/
+<rect x="27" y="25" width="20" height="20" fill="url(#pattern0_4_2)" fill-opacity="0.25"/
+<rect x="539" y="25" width="20" height="20" fill="url(#pattern1_4_2)" fill-opacity="0.25"/
+<rect x="503" y="25" width="20" height="20" fill="url(#pattern2_4_2)" fill-opacity="0.25"/
+<rect x="269" y="32" width="48" height="16" rx="5" fill="#B6B6B6" fill-opacity="0.2"/
+<rect x="269.5" y="32.5" width="47" height="15" rx="4.5" stroke="white" stroke-opacity="0.6"/
+<rect x="242" y="33" width="24" height="16" rx="5" fill="#B6B6B6" fill-opacity="0.2"/
+<rect x="242.5" y="33.5" width="23" height="15" rx="4.5" stroke="white" stroke-opacity="0.6"/
+<rect x="215" y="33" width="24" height="16" rx="5" fill="#B6B6B6" fill-opacity="0.2"/
+<rect x="215.5" y="33.5" width="23" height="15" rx="4.5" stroke="white" stroke-opacity="0.6"/
+<rect x="188" y="33" width="24" height="16" rx="5" fill="#B6B6B6" fill-opacity="0.2"/
+<rect x="188.5" y="33.5" width="23" height="15" rx="4.5" stroke="white" stroke-opacity="0.6"/
+<rect x="347" y="33" width="24" height="16" rx="5" fill="#B6B6B6" fill-opacity="0.2"/
+<rect x="347.5" y="33.5" width="23" height="15" rx="4.5" stroke="white" stroke-opacity="0.6"/
+<rect x="374" y="33" width="24" height="16" rx="5" fill="#B6B6B6" fill-opacity="0.2"/
+<rect x="374.5" y="33.5" width="23" height="15" rx="4.5" stroke="white" stroke-opacity="0.6"/
+<rect x="320" y="33" width="24" height="16" rx="5" fill="#B6B6B6" fill-opacity="0.2"/
+<rect x="320.5" y="33.5" width="23" height="15" rx="4.5" stroke="white" stroke-opacity="0.6"/
+<linearGradient id="paint0_linear_4_2" x1="293" y1="654" x2="293" y2="610" gradientUnits="userSpaceOnUse"
+<linearGradient id="paint1_linear_4_2" x1="293" y1="1" x2="293" y2="45" gradientUnits="userSpaceOnUse"
+
+===== Normal with controll on.svg =====
+<rect width="587" height="654" rx="20" fill="#215756"/
+<rect x="22" y="20" width="30" height="30" rx="5" fill="#B6B6B6" fill-opacity="0.2"/
+<rect x="22.5" y="20.5" width="29" height="29" rx="4.5" stroke="white" stroke-opacity="0.6"/
+<rect x="58" y="20" width="30" height="30" rx="5" fill="#B6B6B6" fill-opacity="0.2"/
+<rect x="58.5" y="20.5" width="29" height="29" rx="4.5" stroke="white" stroke-opacity="0.6"/
+<rect x="498" y="20" width="30" height="30" rx="5" fill="#B6B6B6" fill-opacity="0.2"/
+<rect x="498.5" y="20.5" width="29" height="29" rx="4.5" stroke="white" stroke-opacity="0.6"/
+<rect x="270" y="34" width="48" height="16" rx="5" fill="#B6B6B6" fill-opacity="0.2"/
+<rect x="270.5" y="34.5" width="47" height="15" rx="4.5" stroke="white" stroke-opacity="0.6"/
+<rect x="243" y="35" width="24" height="16" rx="5" fill="#B6B6B6" fill-opacity="0.2"/
+<rect x="243.5" y="35.5" width="23" height="15" rx="4.5" stroke="white" stroke-opacity="0.6"/
+<rect x="216" y="35" width="24" height="16" rx="5" fill="#B6B6B6" fill-opacity="0.2"/
+<rect x="216.5" y="35.5" width="23" height="15" rx="4.5" stroke="white" stroke-opacity="0.6"/
+<rect x="189" y="35" width="24" height="16" rx="5" fill="#B6B6B6" fill-opacity="0.2"/
+<rect x="189.5" y="35.5" width="23" height="15" rx="4.5" stroke="white" stroke-opacity="0.6"/
+<rect x="348" y="35" width="24" height="16" rx="5" fill="#B6B6B6" fill-opacity="0.2"/
+<rect x="348.5" y="35.5" width="23" height="15" rx="4.5" stroke="white" stroke-opacity="0.6"/
+<rect x="375" y="35" width="24" height="16" rx="5" fill="#B6B6B6" fill-opacity="0.2"/
+<rect x="375.5" y="35.5" width="23" height="15" rx="4.5" stroke="white" stroke-opacity="0.6"/
+<rect x="321" y="35" width="24" height="16" rx="5" fill="#B6B6B6" fill-opacity="0.2"/
+<rect x="321.5" y="35.5" width="23" height="15" rx="4.5" stroke="white" stroke-opacity="0.6"/
+<rect x="534" y="20" width="30" height="30" rx="5" fill="#B6B6B6" fill-opacity="0.2"/
+<rect x="534.5" y="20.5" width="29" height="29" rx="4.5" stroke="white" stroke-opacity="0.6"/
+<rect x="27" y="25" width="20" height="20" fill="url(#pattern0_5_133)" fill-opacity="0.25"/
+<rect x="539" y="25" width="20" height="20" fill="url(#pattern1_5_133)" fill-opacity="0.25"/
+<rect x="503" y="25" width="20" height="20" fill="url(#pattern2_5_133)" fill-opacity="0.25"/
+<rect x="541.557" y="560.722" width="41.8228" height="41.8228" fill="url(#pattern3_5_133)"/
+<rect x="513.924" y="563.709" width="35.8482" height="35.8482" fill="url(#pattern4_5_133)"/
+<circle cx="480.69" cy="581.26" r="27.2595" fill="white"/
+<rect width="41.8228" height="41.8228" transform="matrix(-1 0 0 1 419.823 563.709)" fill="url(#pattern5_5_133)"/
+<rect width="35.8482" height="35.8482" transform="matrix(-1 0 0 1 447.456 566.696)" fill="url(#pattern6_5_133)"/
+<circle cx="568.5" cy="521.5" r="9.5" fill="#D9D9D9" fill-opacity="0.1"/
+<circle cx="568.5" cy="521.5" r="9" stroke="white" stroke-opacity="0.2"/
+<rect x="26" y="528" width="100" height="100" rx="10" fill="#215756"/
+<linearGradient id="paint0_linear_5_133" x1="293" y1="1" x2="293" y2="45" gradientUnits="userSpaceOnUse"
+<linearGradient id="paint1_linear_5_133" x1="293" y1="654" x2="293" y2="502" gradientUnits="userSpaceOnUse"
+
+===== Ultra Player.svg =====
+<rect width="587" height="94" rx="20" fill="black"/
+<rect x="433.57" y="27" width="41.8228" height="41.8228" fill="url(#pattern0_6_206)"/
+<circle cx="405.26" cy="47.2595" r="27.2595" fill="white"/
+<rect x="480" y="12" width="94" height="69" rx="10" fill="#020202"/
+<rect x="33" y="7" width="80" height="80" rx="10" fill="#215756"/
+
+===== Ultra's mini player.svg =====
+<rect width="332" height="94" rx="20" fill="black"/
+<rect x="289.57" y="27" width="41.8228" height="41.8228" fill="url(#pattern0_6_265)"/
+<circle cx="261.26" cy="47.2595" r="27.2595" fill="white"/
+<rect x="33" y="7" width="80" height="80" rx="10" fill="#215756"/
+

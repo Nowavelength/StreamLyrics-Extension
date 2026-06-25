@@ -360,8 +360,9 @@ play wake mediaSession metadata navigator media session.
 
 ## Don'ts
 
-- Don't add Google Fonts or any third-party font CDN. Gotham is bundled
-  locally and registered per document through `src/shared/gothamFont.ts`;
+- Don't add Google Fonts or any third-party font CDN. Inter (lyrics) and
+  Instrument Sans (UI/metadata) are bundled locally as WOFF2 and registered
+  per document through `src/shared/appFonts.ts` (binary FontFace, CSP-safe);
   the system stack in `panel.css` is the offline fallback.
 - Don't add new `host_permissions` without updating `README.md`.
 - Don't write to `chrome.storage.sync` from anywhere other than the popup or

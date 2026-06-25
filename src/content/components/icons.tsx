@@ -53,3 +53,32 @@ export const RefreshIcon = ({ size = 18 }: { size?: number }) => (
     <path d="M16 16h5v5" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 );
+
+export const MonitorIcon = ({ size = 18 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <rect x="2.5" y="4" width="19" height="13" rx="2" stroke="currentColor" strokeWidth="2" />
+    <rect x="6" y="2.5" width="14" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.6" opacity="0.55" />
+    <path d="M8 20.5h8M12 17v3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+  </svg>
+);
+
+export const PopInIcon = ({ size = 18 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <rect x="2.5" y="4" width="19" height="13" rx="2" stroke="currentColor" strokeWidth="2" />
+    <path d="M12 14V7M12 7l-3 3M12 7l3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M8 20.5h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+  </svg>
+);
+
+export const TrashIcon = ({ size = 18 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13M10 11v6M14 11v6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+export const ExpandControlIcon = ({ size = 18 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M21 12a9 9 0 1 1-9-9" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+    <path d="M12 8v8M8 12h8" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+  </svg>
+);

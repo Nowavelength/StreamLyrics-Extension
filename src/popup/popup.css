@@ -5,7 +5,7 @@
 }
 
 body {
-    font-family: 'Gotham', 'Noto Sans Devanagari', 'Noto Sans Gurmukhi', 'Nirmala UI',
+    font-family: 'Instrument Sans', 'Inter', 'Noto Sans Devanagari', 'Noto Sans Gurmukhi', 'Nirmala UI',
         'Kohinoor Devanagari', 'Kohinoor Gurmukhi', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     font-weight: 500;
     background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
