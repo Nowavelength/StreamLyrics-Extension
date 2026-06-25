@@ -28,7 +28,8 @@ Dev: `npm run dev` (Vite watch mode; reload the extension after each rebuild).
 manifest.json                Manifest V3. options_ui points to popup.html.
 vite.config.ts               One-liner — CRXJS reads manifest.json directly.
 tsconfig.json                Strict mode, noUnusedLocals/Parameters on.
-icons/                       16/48/128 PNGs (regenerated from lyrics_extention.svg).
+streamlyrics-icon.png        Raster icon master: approved circular fisheye lyrics artwork.
+icons/                       16/48/128 PNGs regenerated from streamlyrics-icon.png.
 README.md                    User-facing.
 report/BUG_REPORT.md         One-time audit, 2026-05-28. Historical reference, NOT a living doc.
 
@@ -359,8 +360,8 @@ play wake mediaSession metadata navigator media session.
 
 ## Don'ts
 
-- Don't add Google Fonts or any third-party font CDN. Manrope is bundled
-  locally and registered per document through `src/shared/manropeFont.ts`;
+- Don't add Google Fonts or any third-party font CDN. Gotham is bundled
+  locally and registered per document through `src/shared/gothamFont.ts`;
   the system stack in `panel.css` is the offline fallback.
 - Don't add new `host_permissions` without updating `README.md`.
 - Don't write to `chrome.storage.sync` from anywhere other than the popup or

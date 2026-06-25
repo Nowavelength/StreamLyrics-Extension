@@ -1,7 +1,7 @@
 import { createRoot, Root } from 'react-dom/client';
 import { App } from './App';
 import panelStyles from './styles/panel.css?inline';
-import { loadManropeFont } from '../shared/manropeFont';
+import { loadGothamFont } from '../shared/gothamFont';
 
 /**
  * StreamLyrics content script entry point.
@@ -59,7 +59,7 @@ function waitForPlayer(initialVisible: boolean, startedAt: number) {
 function injectApp(initialVisible: boolean) {
     if (document.getElementById(CONTAINER_ID)) return;
 
-    void loadManropeFont(document);
+    void loadGothamFont(document);
 
     const host = document.createElement('div');
     host.id = CONTAINER_ID;

@@ -5,9 +5,9 @@ import manifest from './manifest.json';
 
 export default defineConfig({
     build: {
-        // Keep the locally bundled Manrope font inside the generated JS so
+        // Keep the locally bundled Gotham font inside the generated JS so
         // Shadow DOM and Document PiP never need a web-accessible font URL.
-        assetsInlineLimit: 30_000,
+        assetsInlineLimit: 100_000,
     },
     plugins: [
         react(),

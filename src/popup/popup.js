@@ -1,6 +1,6 @@
-import { loadManropeFont } from '../shared/manropeFont';
+import { loadGothamFont } from '../shared/gothamFont';
 
-void loadManropeFont(document);
+void loadGothamFont(document);
 
 // Default settings - kept in sync with src/background/service-worker.ts
 const DEFAULT_SETTINGS = {

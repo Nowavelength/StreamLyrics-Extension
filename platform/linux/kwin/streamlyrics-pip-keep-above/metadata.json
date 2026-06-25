@@ -1,0 +1,16 @@
+{
+    "KPlugin": {
+        "Id": "streamlyrics-pip-keep-above",
+        "Name": "StreamLyrics PiP Keep Above",
+        "Description": "Keeps StreamLyrics Picture-in-Picture windows always on top.",
+        "Version": "1.0.0",
+        "Authors": [
+            {
+                "Name": "StreamLyrics"
+            }
+        ]
+    },
+    "KPackageStructure": "KWin/Script",
+    "X-Plasma-API": "javascript",
+    "X-Plasma-MainScript": "code/main.js"
+}

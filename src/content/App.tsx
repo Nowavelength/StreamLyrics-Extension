@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Panel } from './components/Panel';
 import { useSettings } from './hooks/useSettings';
-import { loadManropeFont } from '../shared/manropeFont';
+import { loadGothamFont } from '../shared/gothamFont';
 
 /**
  * Error boundary so a crash inside Panel/hooks doesn't leave a blank shadow
@@ -111,7 +111,7 @@ export const App: React.FC<AppProps> = ({ styles, initialVisible = false }) => {
                 height: 600,
             });
 
-            await loadManropeFont(pipWin.document);
+            await loadGothamFont(pipWin.document);
             setPipWindow(pipWin);
 
             const { documentElement, body, head } = pipWin.document;

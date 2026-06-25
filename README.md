@@ -94,7 +94,7 @@ Vite watches for file changes and rebuilds automatically. After each rebuild, go
 |---|---|
 | UI Framework | React 18 + TypeScript |
 | Bundler | Vite + CRXJS |
-| Styling | Vanilla CSS (Shadow DOM isolated, locally bundled Manrope + system fallbacks) |
+| Styling | Vanilla CSS (Shadow DOM isolated, locally bundled Gotham + system fallbacks) |
 | Lyrics API | LRCLIB |
 | Audio | Web Audio API (AnalyserNode FFT) |
 | Color | ColorThief (median-cut quantization) |
