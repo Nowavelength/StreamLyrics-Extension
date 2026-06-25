@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
+import { createAudioBarsDriver } from './audioBarsDriver';
 
 /**
  * Audio Graph cache — bound to the DOM media element, NOT React lifecycle.
@@ -78,6 +79,7 @@ export function useAudioBars(barCount = 32) {
         let rafId = 0;
         let analyser: AnalyserNode | null = null;
         let data: Uint8Array | null = null;
+        let driver: ReturnType<typeof createAudioBarsDriver> | null = null;
         let mediaEl: HTMLMediaElement | null = null;
         let isActive = true;
         let lastFrame = 0;
@@ -97,8 +99,8 @@ export function useAudioBars(barCount = 32) {
                     const audioCtx = new (window.AudioContext ||
                         (window as any).webkitAudioContext)();
                     const newAnalyser = audioCtx.createAnalyser();
-                    newAnalyser.fftSize = 256;
-                    newAnalyser.smoothingTimeConstant = 0.8;
+                    newAnalyser.fftSize = 2048;
+                    newAnalyser.smoothingTimeConstant = 0.55;
 
                     const source = audioCtx.createMediaElementSource(mediaEl);
                     source.connect(newAnalyser);
@@ -123,6 +125,11 @@ export function useAudioBars(barCount = 32) {
             if (cached) {
                 analyser = cached.analyser;
                 data = new Uint8Array(analyser.frequencyBinCount);
+                driver = createAudioBarsDriver({
+                    barCount,
+                    sampleRate: cached.audioCtx.sampleRate,
+                    fftSize: analyser.fftSize,
+                });
             } else {
                 isProceduralRef.current = true;
             }
@@ -135,6 +142,7 @@ export function useAudioBars(barCount = 32) {
                     rafId = requestAnimationFrame(tick);
                     return;
                 }
+                const deltaMs = lastFrame ? now - lastFrame : FRAME_BUDGET_MS;
                 lastFrame = now;
 
                 // Auto-resume if browser suspended the context.
@@ -155,7 +163,7 @@ export function useAudioBars(barCount = 32) {
                     return;
                 }
 
-                if (isProceduralRef.current || !analyser || !data) {
+                if (isProceduralRef.current || !analyser || !data || !driver) {
                     // --- Procedural Fallback Mode ---
                     // Generates smooth, beautiful mirrored mock waves (bass center, treble edge)
                     const timeFactor = performance.now() * 0.0035;
@@ -183,43 +191,7 @@ export function useAudioBars(barCount = 32) {
                 } else {
                     // --- Standard Web Audio API Mode ---
                     analyser.getByteFrequencyData(data as any);
-                    const usefulBins = Math.floor(data.length * 0.6);
-
-                    const next = Array.from({ length: barCount }, (_, i) => {
-                        const half = barCount / 2;
-                        const centerDist =
-                            i < half
-                                ? (half - 1 - i) / (half - 1)
-                                : (i - half) / (half - 1);
-
-                        const binIndex = Math.floor(
-                            Math.pow(centerDist, 1.5) * usefulBins,
-                        );
-                        const windowSize = Math.max(
-                            1,
-                            Math.floor(centerDist * 3),
-                        );
-
-                        let sum = 0;
-                        let count = 0;
-                        const start = Math.max(0, binIndex - windowSize);
-                        const end = Math.min(
-                            data!.length - 1,
-                            binIndex + windowSize,
-                        );
-                        for (let j = start; j <= end; j++) {
-                            sum += data![j];
-                            count++;
-                        }
-                        const avg = count ? sum / count : 0;
-                        const eqBoost = 1 + centerDist * 0.8;
-                        const raw = (avg / 255) * eqBoost;
-                        return 0.05 + clamp01(raw) * 0.95;
-                    });
-
-                    barsRef.current = barsRef.current.map(
-                        (prev, i) => prev * 0.7 + next[i] * 0.3,
-                    );
+                    barsRef.current = driver.process(data, deltaMs);
                     setBars([...barsRef.current]);
                 }
 

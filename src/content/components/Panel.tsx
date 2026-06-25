@@ -675,7 +675,6 @@ export const Panel: React.FC<PanelProps> = ({
               right: 'auto',
               bottom: 'auto',
               position: 'fixed',
-              cursor: isDragging ? 'grabbing' : 'grab',
               ['--lyric-font-size' as any]: `${settings.fontSize}px`,
           };
 
