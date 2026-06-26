@@ -8,7 +8,8 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test:audio-driver": "node scripts/test-audio-bars-driver.mjs",
-    "verify:font": "node scripts/verify-gotham.mjs"
+    "test:kwin-helper": "node scripts/test-kwin-helper.mjs",
+    "verify:font": "node scripts/verify-app-fonts.mjs"
   },
   "dependencies": {
     "colorthief": "^2.4.0",
