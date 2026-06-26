@@ -33,7 +33,42 @@ StreamLyrics is a Chrome Extension that overlays a resizable, draggable lyrics p
 
 ## 📦 Installation
 
-### Option A — Load from source (Recommended)
+### Option A — Download a release
+
+Download the ZIP for your system from the [latest release](https://github.com/Nowavelength/StreamLyrics-Extension/releases/latest), then follow the matching expandable guide.
+
+<details>
+<summary><strong>Windows download flow</strong></summary>
+
+1. Download [`StreamLyrics-Windows.zip`](https://github.com/Nowavelength/StreamLyrics-Extension/releases/latest/download/StreamLyrics-Windows.zip).
+2. Extract the ZIP somewhere permanent, for example `Documents\StreamLyrics`.
+3. Open Chrome and go to `chrome://extensions/`.
+4. Toggle **Developer mode** ON.
+5. Click **Load unpacked**.
+6. Select the extracted `StreamLyrics` folder.
+7. Open [YouTube Music](https://music.youtube.com), play a song, and click the StreamLyrics toolbar icon.
+
+</details>
+
+<details>
+<summary><strong>Linux download flow</strong></summary>
+
+1. Download [`StreamLyrics-Linux.zip`](https://github.com/Nowavelength/StreamLyrics-Extension/releases/latest/download/StreamLyrics-Linux.zip).
+2. Extract the ZIP somewhere permanent, for example `~/Applications/StreamLyrics`.
+3. Open Chrome or Chromium and go to `chrome://extensions/`.
+4. Toggle **Developer mode** ON.
+5. Click **Load unpacked**.
+6. Select the extracted `StreamLyrics` folder.
+7. Optional for KDE Plasma users: install the KWin helper so StreamLyrics Document PiP stays above other windows:
+   ```bash
+   bash platform/linux/kwin/install.sh
+   ```
+   Run that from the folder created when you extracted the ZIP. Do not use `sudo`; the helper installs into your user config.
+8. Open [YouTube Music](https://music.youtube.com), play a song, and click the StreamLyrics toolbar icon.
+
+</details>
+
+### Option B — Load from source
 
 **Requirements:** Node.js 18+, npm
 
@@ -64,7 +99,7 @@ This compiles everything into the `dist/` folder.
 
 ---
 
-### Option B — Development mode (with hot reload)
+### Option C — Development mode (with hot reload)
 
 ```bash
 npm run dev
@@ -94,7 +129,7 @@ Vite watches for file changes and rebuilds automatically. After each rebuild, go
 |---|---|
 | UI Framework | React 18 + TypeScript |
 | Bundler | Vite + CRXJS |
-| Styling | Vanilla CSS (Shadow DOM isolated, locally bundled Gotham + system fallbacks) |
+| Styling | Vanilla CSS (Shadow DOM isolated, locally bundled Inter + Instrument Sans with system fallbacks) |
 | Lyrics API | LRCLIB |
 | Audio | Web Audio API (AnalyserNode FFT) |
 | Color | ColorThief (median-cut quantization) |
